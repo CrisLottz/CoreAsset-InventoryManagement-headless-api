@@ -1,0 +1,47 @@
+# ==========================================
+# Entorno y Secretos (CRÍTICO)
+# ==========================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ==========================================
+# Docker y Base de Datos Local
+# ==========================================
+# Ignoramos la carpeta del volumen de PostgreSQL que definimos en el docker-compose
+postgres_data/
+db.sqlite3
+*.log
+
+# ==========================================
+# Python / Django (Backend)
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+backend/venv/
+backend/env/
+backend/staticfiles/
+backend/media/
+
+# ==========================================
+# Node / React / Vite (Frontend)
+# ==========================================
+node_modules/
+dist/
+build/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================================
+# Sistema Operativo y Editores (IDE)
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
