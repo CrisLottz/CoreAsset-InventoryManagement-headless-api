@@ -39,7 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'users',
-    'rbac'
+    'rbac',
+    'audit'
 ]
 
 AUTH_USER_MODEL = 'users.User'
