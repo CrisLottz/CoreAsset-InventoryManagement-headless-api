@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from rbac.models import Role
 
-# Obtenemos dinámicamente tu modelo User con UUID
 User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
@@ -14,6 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
             'password': {'write_only': True}, # Nunca debe salir en un GET, solo entra en POST/PUT
             'id': {'read_only': True}         # El frontend nunca debe intentar modificar el UUID
         }
+     
 
     def create(self, validated_data):
         """
@@ -32,3 +33,20 @@ class UserSerializer(serializers.ModelSerializer):
             
         user.save()
         return user
+    
+class AssignRoleSerializer(serializers.Serializer):
+    """
+    Serializador RPC exclusivo para validar la inyección de roles.
+    Espera un payload como: {"role_ids": [1, 2]}
+    """
+    role_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=True # Permitimos array vacío para poder revocar todos los roles
+    )
+
+    def validate_role_ids(self, value):
+        # Protegemos la integridad relacional comprobando que todos los IDs existen en la base de datos
+        existing_roles = Role.objects.filter(id__in=value).values_list('id', flat=True)
+        if len(existing_roles) != len(value):
+            raise serializers.ValidationError("Uno o más roles proporcionados no existen en el sistema.")
+        return value    

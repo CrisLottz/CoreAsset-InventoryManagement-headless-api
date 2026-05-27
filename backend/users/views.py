@@ -10,6 +10,11 @@ from django.contrib.auth import logout
 from rest_framework import viewsets
 from django.contrib.auth import get_user_model
 from .serializers import UserSerializer
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
+from rbac.models import Role
+from .serializers import AssignRoleSerializer # Importamos el nuevo serializador
 
 User = get_user_model()
 
@@ -79,13 +84,37 @@ class LogoutView(APIView):
         )
     
 class UserViewSet(viewsets.ModelViewSet):
-    """
-    Controlador maestro para el CRUD de Usuarios.
-    ModelViewSet autogenera GET(list), GET(detail), POST, PUT, PATCH y DELETE.
-    """
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
-    
-    # CRÍTICO: Bloqueamos todo el inventario de usuarios. 
-    # Solo personal autenticado puede consultarlo o modificarlo.
-    permission_classes = [IsAuthenticated]    
+    permission_classes = [IsAuthenticated]
+
+    # --- NUEVO CÓDIGO ---
+    @action(detail=True, methods=['post'], url_path='assign-roles')
+    def assign_roles(self, request, pk=None):
+        """
+        Sobrescribe los roles actuales del usuario con la lista proporcionada.
+        """
+        # 1. Recuperamos el usuario específico de la URL
+        user = self.get_object() 
+        
+        # 2. Pasamos el JSON entrante por nuestro validador estricto
+        serializer = AssignRoleSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            role_ids = serializer.validated_data['role_ids']
+            
+            # 3. Obtenemos las instancias reales de los roles
+            roles = Role.objects.filter(id__in=role_ids)
+            
+            # 4. Asignamos los roles. 
+            # Nota Arquitectónica: Usamos user.groups.set() porque, internamente, 
+            # nuestro Role es un proxy del modelo Group de Django.
+            user.groups.set(roles)
+            
+            return Response(
+                {"detail": "Privilegios actualizados con éxito.", "assigned_roles": role_ids},
+                status=status.HTTP_200_OK
+            )
+            
+        # Si envían basura (ej. letras en lugar de números), el serializador bloquea y retorna 400
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
