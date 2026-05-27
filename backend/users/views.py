@@ -5,6 +5,9 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework.permissions import IsAuthenticated
+from django.contrib.auth import logout
+
 
 # Decorador vital: Garantiza que, pase lo que pase, Django envíe la cookie CSRF al frontend
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -38,3 +41,34 @@ class LoginView(APIView):
                 {"detail": "Credenciales inválidas"}, 
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+
+class UserMeView(APIView):
+    # CRÍTICO: Este endpoint exige que la cookie de sesión sea válida
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Como pasó el filtro de IsAuthenticated, 'request.user' ya contiene 
+        # el objeto del usuario real consultado desde PostgreSQL.
+        user = request.user
+        
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_staff": user.is_staff,
+            "is_mfa_enabled": user.is_mfa_enabled # Incluimos el campo específico de tu diagrama
+        }, status=status.HTTP_200_OK)
+
+class LogoutView(APIView):
+    # Solo alguien con sesión iniciada puede cerrarla
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        # La función nativa logout() limpia los datos de la sesión y destruye la cookie
+        logout(request)
+        
+        return Response(
+            {"detail": "Sesión cerrada exitosamente."}, 
+            status=status.HTTP_200_OK
+        )
