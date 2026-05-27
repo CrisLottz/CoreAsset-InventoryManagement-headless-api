@@ -7,6 +7,11 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import logout
+from rest_framework import viewsets
+from django.contrib.auth import get_user_model
+from .serializers import UserSerializer
+
+User = get_user_model()
 
 
 # Decorador vital: Garantiza que, pase lo que pase, Django envíe la cookie CSRF al frontend
@@ -72,3 +77,15 @@ class LogoutView(APIView):
             {"detail": "Sesión cerrada exitosamente."}, 
             status=status.HTTP_200_OK
         )
+    
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    Controlador maestro para el CRUD de Usuarios.
+    ModelViewSet autogenera GET(list), GET(detail), POST, PUT, PATCH y DELETE.
+    """
+    queryset = User.objects.all().order_by('-date_joined')
+    serializer_class = UserSerializer
+    
+    # CRÍTICO: Bloqueamos todo el inventario de usuarios. 
+    # Solo personal autenticado puede consultarlo o modificarlo.
+    permission_classes = [IsAuthenticated]    
