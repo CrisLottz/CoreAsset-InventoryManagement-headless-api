@@ -88,7 +88,6 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
-    # --- NUEVO CÓDIGO ---
     @action(detail=True, methods=['post'], url_path='assign-roles')
     def assign_roles(self, request, pk=None):
         """
@@ -118,3 +117,13 @@ class UserViewSet(viewsets.ModelViewSet):
             
         # Si envían basura (ej. letras en lugar de números), el serializador bloquea y retorna 400
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
+    
+    def get_serializer_class(self):
+        """
+        Sobrescribe el serializador por defecto dependiendo de la acción.
+        Garantiza que la interfaz web y la documentación OpenAPI 
+        muestren los campos correctos.
+        """
+        if self.action == 'assign_roles':
+            return AssignRoleSerializer
+        return super().get_serializer_class()

@@ -41,7 +41,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'users',
     'rbac',
-    'audit'
+    'audit',
+    'assets'
 ]
 
 AUTH_USER_MODEL = 'users.User'
