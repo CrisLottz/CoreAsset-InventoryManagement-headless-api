@@ -9,14 +9,14 @@ ASSET_METADATA_SCHEMA = {
     "properties": {
         "type": {"type": "string", "enum": ["laptop", "license", "mobile"]}
     },
-    # Patrón de validación polimórfica
     "allOf": [
         {
             "if": {"properties": {"type": {"const": "laptop"}}},
             "then": {
-                "required": ["mac_address", "cpu"],
+                # Quitamos "mac_address" y "cpu" de la lista de requeridos.
+                # Ahora, el usuario puede enviar un JSON solo con {"type": "laptop"} y pasará.
                 "properties": {
-                    # Validación estricta con RegEx para la MAC Address
+                    # Si envían la MAC, jsonschema aún verificará que el formato sea correcto.
                     "mac_address": {"type": "string", "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"},
                     "cpu": {"type": "string"}
                 }
@@ -25,6 +25,7 @@ ASSET_METADATA_SCHEMA = {
         {
             "if": {"properties": {"type": {"const": "license"}}},
             "then": {
+                # Mantenemos 'tenant' como obligatorio para licencias porque sin él, el activo es inútil.
                 "required": ["tenant"],
                 "properties": {
                     "tenant": {"type": "string"}
