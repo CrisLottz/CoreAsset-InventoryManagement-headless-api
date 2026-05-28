@@ -4,9 +4,6 @@ from django.contrib.postgres.indexes import GinIndex
 import uuid
 
 class Location(models.Model):
-    """
-    Entidad White-Label para agrupar activos físicamente o lógicamente.
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
     is_active = models.BooleanField(default=True)
@@ -16,9 +13,6 @@ class Location(models.Model):
         return self.name
 
 class Asset(models.Model):
-    """
-    Tronco común del inventario. Utiliza JSONField para flexibilidad extrema.
-    """
     STATUS_CHOICES = [
         ('ACTIVE', 'Operativo'),
         ('MAINTENANCE', 'En Mantenimiento'),
@@ -26,13 +20,8 @@ class Asset(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # Etiqueta física de inventario (Ej. CLF-2026-001)
     internal_tag = models.CharField(max_length=50, unique=True) 
-    
-    # Integridad Referencial Estricta: PROTECT impide borrar una sede si tiene activos vinculados
     location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='assets')
-    
-    # SET_NULL permite que un empleado sea eliminado de la empresa sin que el activo desaparezca
     assigned_to = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -40,21 +29,21 @@ class Asset(models.Model):
         blank=True,
         related_name='assigned_assets'
     )
-    
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
-    
-    # Columna flexible para características dinámicas (MAC, expiración de licencias, etc.)
     metadata_json = models.JSONField(default=dict, blank=True)
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        # Optimización de consultas recurrentes a nivel de motor DB
         indexes = [
             models.Index(fields=['location', 'status']),
             models.Index(fields=['internal_tag']),
-            GinIndex(fields=['metadata_json']), 
+            GinIndex(fields=['metadata_json']),
+        ]
+        # NUEVO: Generación de checkboxes personalizadas para los Roles
+        permissions = [
+            ("view_global_inventory", "Puede ver activos de TODAS las sedes"),
+            ("manage_global_inventory", "Puede editar/borrar activos de TODAS las sedes"),
         ]
 
     def __str__(self):
