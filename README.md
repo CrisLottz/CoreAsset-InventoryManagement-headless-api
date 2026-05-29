@@ -311,6 +311,19 @@ class AuditMiddleware:
 
 ---
 
+## Security & Compliance Standards
+
+The architectural foundation of this API is engineered to align with industry-leading security frameworks and compliance mandates:
+
+* **SOC 2 Type II Readiness (Audit & Accountability):** The system features an immutable audit trail (`AuditMiddleware`). Every state-mutating request is automatically logged to a JSONB store. The relational design enforces `on_delete=models.PROTECT` on user accounts, guaranteeing that the chain of custody for historical asset modifications cannot be destroyed by administrative deletion.
+* **OWASP Top 10 Mitigation:**
+  * **A01:2021-Broken Access Control:** Mitigated via multi-layered RBAC and strict geographical boundary enforcement (`IsLocationManagerStrict`). Even authenticated managers cannot inject records into unauthorized locations.
+  * **A05:2021-Security Misconfiguration:** All internal container ports (Redis, PostgreSQL) are bound strictly to loopback interfaces (`127.0.0.1`) with required authentication, eliminating external network attack vectors for Remote Code Execution (RCE).
+  * **A08:2021-Software and Data Integrity Failures:** Defended by declarative JSON Schema validation at the DRF serialization layer, ensuring the database never processes malformed or malicious payloads.
+
+---
+
+
 ## Project Structure
 
 ```
@@ -827,6 +840,18 @@ class AuditMiddleware:
 
 **Almacenamiento JSONB**: El campo `metadata_json` usa el tipo `jsonb` nativo de PostgreSQL, habilitando consultas indexadas sobre el payload de auditoría sin cambios de esquema a medida que los campos capturados evolucionen.
 
+---
+
+## Estándares de Seguridad y Cumplimiento
+
+La base arquitectónica de esta API está diseñada para alinearse con los marcos de seguridad y mandatos de cumplimiento líderes en la industria:
+
+* **Preparación para SOC 2 Type II (Auditoría y Responsabilidad):** El sistema cuenta con una pista de auditoría inmutable (`AuditMiddleware`). Cada petición que muta estado se registra automáticamente en un almacén JSONB. El diseño relacional impone `on_delete=models.PROTECT` en las cuentas de usuario, garantizando que la cadena de custodia de las modificaciones históricas de activos no pueda ser destruida por eliminaciones administrativas.
+* **Mitigación OWASP Top 10:**
+  * **A01:2021-Broken Access Control:** Mitigado a través de RBAC multicapa y una aplicación estricta de límites geográficos (`IsLocationManagerStrict`). Ni siquiera los gerentes autenticados pueden inyectar registros en sedes no autorizadas.
+  * **A05:2021-Security Misconfiguration:** Todos los puertos internos de contenedores (Redis, PostgreSQL) están vinculados estrictamente a interfaces de loopback (`127.0.0.1`) con autenticación requerida, eliminando vectores de ataque de red externos para Ejecución Remota de Código (RCE).
+  * **A08:2021-Software and Data Integrity Failures:** Defendido mediante validación declarativa de JSON Schema en la capa de serialización de DRF, asegurando que la base de datos nunca procese payloads malformados o maliciosos.
+ 
 ---
 
 ## Estructura del Proyecto
