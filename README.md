@@ -1,636 +1,1029 @@
-# CoreAsset — RBAC Inventory Engine
+<div align="center">
 
-> **Headless API · Enterprise-grade · White-Label Ready**
+# CoreAsset — Inventory Management Headless API
 
-A hardened, stateless-free backend core for enterprise platforms that demand **identity governance**, **hardware/software asset tracking**, and **tamper-proof audit trails**. Built as a composable Headless API, it is designed to power any white-label frontend without coupling to a specific UI layer.
+**Multi-Tenant Backend Engine for Asset Tracking, Identity Governance & Automated Compliance**
+
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![DRF](https://img.shields.io/badge/Django_REST_Framework-3.17-A30000?style=for-the-badge)](https://www.django-rest-framework.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Swagger](https://img.shields.io/badge/OpenAPI-Swagger_UI-85EA2D?style=for-the-badge&logo=swagger&logoColor=black)](https://swagger.io/)
+[![Poetry](https://img.shields.io/badge/Poetry-Dependency_Mgmt-60A5FA?style=for-the-badge&logo=poetry&logoColor=white)](https://python-poetry.org/)
+[![License](https://img.shields.io/badge/License-Proprietary-EF4444?style=for-the-badge)](#)
 
 ---
+
+> **⚡ Decoupled Architecture** — This repository contains **only the API engine** (Headless Backend).
+>
+> The web client (Frontend) built with **Astro / React** lives in a separate repository:
+>
+> **🔗 [CoreAsset-InventoryManagement-web-client](https://github.com/CrisLottz/CoreAsset-InventoryManagement-web-client)**
+
+---
+
+</div>
 
 ## Table of Contents
 
-1. [Executive Summary](#1-executive-summary)
-2. [System Architecture — The Four Pillars](#2-system-architecture--the-four-pillars)
-3. [Project Directory Structure](#3-project-directory-structure)
-4. [API Reference](#4-api-reference)
-5. [Local Installation & Deployment](#5-local-installation--deployment)
-6. [Production Standards](#6-production-standards)
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Architecture & Design Decisions](#architecture--design-decisions)
+  - [1. Session Authentication (No JWT)](#1-session-authentication-no-jwt)
+  - [2. RBAC & Object-Level Permissions](#2-rbac--object-level-permissions)
+  - [3. Hybrid Database — JSONB + GIN Index](#3-hybrid-database--jsonb--gin-index)
+  - [4. Declarative Validation — jsonschema](#4-declarative-validation--jsonschema)
+  - [5. Cache & Performance — Redis Write-Through](#5-cache--performance--redis-write-through)
+  - [6. Security Hardening — Pickle RCE Mitigation](#6-security-hardening--pickle-rce-mitigation)
+  - [7. Compliance Engine — Audit Middleware](#7-compliance-engine--audit-middleware)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Installation & Local Deployment](#installation--local-deployment)
+- [API Documentation](#api-documentation)
+- [API Reference](#api-reference)
+- [Production Checklist](#production-checklist)
 
 ---
 
-## 1. Executive Summary
+## Overview
 
-CoreAsset-RBAC-Inventory-Engine is the backend nucleus of a White-Label enterprise asset management platform. It exposes a RESTful API built with **Django 5 + Django REST Framework** and runs in a fully isolated **Docker Compose** environment backed by **PostgreSQL 15**.
+CoreAsset is an enterprise-grade, white-label Headless API engineered for organizations that require centralized **hardware/software asset tracking**, **location-scoped identity governance**, and **tamper-proof audit trails** — all behind a single, composable REST interface.
 
-Its design philosophy prioritizes **security over convenience**, **traceability over speed**, and **composability over monolithic coupling**. Every architectural decision — from session-based authentication to JSONB-backed asset metadata — was made to satisfy enterprise compliance requirements without sacrificing developer ergonomics.
-
-**Core capabilities delivered in the current phase:**
-
-| Capability | Status |
-|---|---|
-| Session-based authentication (Cookie + CSRF) | ✅ Production-ready |
-| Custom UUID-primary-key User model | ✅ Production-ready |
-| RBAC via Django Proxy-Model pattern | ✅ Production-ready |
-| Granular role assignment via RPC endpoint | ✅ Production-ready |
-| Automated HTTP mutation audit trail (JSONB) | ✅ Production-ready |
-| Asset inventory with JSONB metadata column | 🔷 Planned — Phase 2 |
-| Multi-location filtering for physical assets | 🔷 Planned — Phase 2 |
+The backend is completely decoupled from any frontend. It communicates exclusively through a versioned RESTful API (`/api/v1/`), enabling any client — React SPA, mobile app, or third-party integration — to consume its services without coupling.
 
 ---
 
-## 2. System Architecture — The Four Pillars
+## Key Features
 
-### Pillar I — Containerized Infrastructure
-
-The entire runtime is isolated with **Docker Compose**, defining three independent, networked services:
-
-| Service | Image | Exposed Port (localhost only) |
+| Domain | Capability | Implementation |
 |---|---|---|
-| `db` | `postgres:15-alpine` | `127.0.0.1:5432` |
-| `redis` | `redis:7-alpine` | `127.0.0.1:6379` |
-| `backend` | Custom (`python:3.11-slim`) | `127.0.0.1:8000` |
-| `frontend` | Custom | `127.0.0.1:5173` |
-
-All ports are bound **exclusively to the loopback interface** (`127.0.0.1`), ensuring no service is inadvertently exposed to external networks. PostgreSQL data is persisted in a named Docker volume (`postgres_data`).
-
-Dependency management inside the backend container is handled by **Poetry** (`pyproject.toml` + `poetry.lock`), which pins every transitive dependency to a reproducible hash. Because the container is itself an isolated environment, Poetry is configured to install packages globally within it (`virtualenvs.create = false`), avoiding redundant virtual-environment overhead.
+| **Authentication** | Session-based auth (Cookie + CSRF) | `SessionAuthentication` — no JWT |
+| **Identity (IAM)** | Custom User model with UUID v4 PK | `users.User` → `AbstractUser` |
+| **RBAC** | Role = Proxy over Django Group | `rbac.Role` → `auth_group` (zero DDL) |
+| **Permissions** | Geographic write-scoping per location | `IsLocationManagerStrict` object permission |
+| **Inventory** | Polymorphic assets via relational trunk + JSONB | `Asset.metadata_json` + GIN index |
+| **Validation** | Declarative schema contracts on JSONB | `jsonschema` in DRF serializers |
+| **Caching** | Per-user Redis cache with reactive invalidation | `django-redis` + Pickle serializer |
+| **Audit** | Automatic mutation logging via HTTP middleware | `AuditMiddleware` → `audit_logs` (JSONB) |
+| **Docs** | Auto-generated interactive API docs | `drf-spectacular` → Swagger UI |
+| **Infra** | Fully containerized, loopback-only ports | Docker Compose (4 services) |
 
 ---
 
-### Pillar II — Security & Authentication (No JWT)
+## Architecture & Design Decisions
 
-This system deliberately **does not implement JWT**. The authentication model relies on **Django's native Session Authentication** with **HTTP-only Cookies and CSRF tokens** — a fundamentally more secure architecture for browser-based clients because:
+Every choice documented below answers a specific **"why?"** — not just what the system does, but why the alternative was deliberately rejected.
 
-- Session cookies are `HttpOnly` and cannot be read by JavaScript, eliminating XSS-based token theft.
-- Every mutating request must carry a valid CSRF token, eliminating CSRF attacks even with a stolen cookie.
-- Session invalidation is server-side and immediate — revoking access requires no token blacklists.
+### 1. Session Authentication (No JWT)
 
-The DRF configuration enforces this contract globally:
+> **Decision**: Use `SessionAuthentication` (HTTP-only Cookies + CSRF tokens) instead of JWT.
 
 ```python
+# core/settings.py
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
     'DEFAULT_PERMISSION_CLASSES':     ['rest_framework.permissions.IsAuthenticated'],
 }
 ```
 
-CORS and CSRF policies are strictly scoped to the frontend origin (`http://localhost:5173` in development), and `CORS_ALLOW_CREDENTIALS = True` permits cross-origin cookie transmission without relaxing the trust boundary.
+**Why not JWT?**
+
+| Concern | Session Cookies | JWT |
+|---|---|---|
+| XSS token theft | ✅ Immune — `HttpOnly` cookies are invisible to JS | ❌ Tokens stored in `localStorage` are readable by any script |
+| Session revocation | ✅ Instant — server deletes session row | ❌ Requires token blacklist infrastructure |
+| CSRF protection | ✅ Built-in — Django enforces `csrftoken` on every mutation | ⚠️ Not applicable (stateless) |
+| Token management | ✅ Browser handles cookie lifecycle | ❌ Developer must implement refresh/rotation logic |
+
+CORS and CSRF trust boundaries are scoped exclusively to the frontend origin:
+
+```python
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+```
 
 ---
 
-### Pillar III — Identity & Access Management (IAM / RBAC)
+### 2. RBAC & Object-Level Permissions
 
-**Custom User Model**
+> **Decision**: Permissions are not global. Write access is geographically scoped — a manager in Denver **cannot** modify assets in Utah, not even via direct API injection.
 
-The `User` model (`users.User`) extends Django's `AbstractUser` with two critical overrides:
+The system implements two layers of access control:
 
-- **UUID v4 as primary key** — eliminates sequential ID enumeration attacks and is globally unique by construction.
-- **`is_mfa_enabled` flag** — foundation for future multi-factor authentication enforcement.
-
-```python
-class User(AbstractUser):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    is_mfa_enabled = models.BooleanField(default=False)
-```
-
-**Role Management via Proxy Model**
-
-Rather than introducing a separate, unrelated `Role` table and duplicating Django's permission infrastructure, the `rbac.Role` model is implemented as a **Proxy Model** over Django's native `Group`:
+**Layer 1 — Role as Proxy Model** (`rbac/models.py`)
 
 ```python
 class Role(Group):
     class Meta:
-        proxy = True
-        app_label = 'rbac'
+        proxy = True  # No new table. Uses auth_group. All Django decorators work.
 ```
 
-This means:
-- No new DDL table is created — `Role` objects are stored in `auth_group`.
-- All of Django's built-in permission decorators (`@permission_required`, `user.has_perm()`) work out of the box.
-- The business domain uses the vocabulary "Role" while the ORM uses the battle-tested `Group` infrastructure.
+**Layer 2 — Location-Scoped Object Permissions** (`assets/permissions.py`)
 
-**Granular Role Assignment via Explicit RPC Endpoint**
-
-Role assignment is never a silent side effect of a `PATCH /users/{id}/` call. It is an explicit, intentional, auditable action exposed as a dedicated RPC-style endpoint:
-
+```python
+class IsLocationManagerStrict(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_superuser or request.user.has_perm('assets.manage_global_inventory'):
+            return True
+        # Geographic gate: user.assigned_locations must include the asset's location
+        location = obj if hasattr(obj, 'name') else obj.location
+        return request.user.assigned_locations.filter(id=location.id).exists()
 ```
-POST /api/users/inventory/{uuid}/assign-roles/
+
+The `User` model carries a `ManyToManyField` to `Location`, creating a per-user geographic scope. The `AssetViewSet.get_queryset()` pre-filters results at the database level (not in Python), ensuring that even `GET` requests respect the boundary:
+
+```python
+if not user.is_superuser and not user.has_perm('assets.view_global_inventory'):
+    queryset = queryset.filter(location__in=user.assigned_locations.all())
 ```
 
-This ensures that a developer cannot accidentally overwrite a user's roles while updating their profile — the operations are architecturally separated.
+**Custom model-level permissions** provide additional granularity:
 
----
-
-### Pillar IV — Compliance Engine (Audit Middleware)
-
-Every state-mutating HTTP request — `POST`, `PUT`, `PATCH`, `DELETE` — that returns a successful `2xx` response is **automatically intercepted** by `audit.middleware.AuditMiddleware` and recorded in the `audit_logs` table without any view-level code involvement.
-
-Each audit record captures:
-
-| Field | Content |
+| Permission Codename | Effect |
 |---|---|
-| `id` | UUID v4 (immutable primary key) |
-| `actor` | FK → authenticated `User` (`PROTECT`) |
-| `action` | HTTP method (`POST`, `PUT`, etc.) |
-| `entity_type` | Request path (URL) |
-| `entity_id` | UUID of the affected resource |
-| `ip_address` | Client IP from `REMOTE_ADDR` |
-| `metadata_json` | JSONB blob: `status_code`, `user_agent` |
-| `created_at` | Auto-set UTC timestamp |
-
-**Protected custody chain**: The `actor` foreign key uses `on_delete=models.PROTECT`. This means that deleting a user who has audit records is a **database-level hard block** — the integrity of the legal audit trail cannot be destroyed through a UI action.
-
-**JSONB storage** (`models.JSONField` → PostgreSQL `jsonb`) enables native indexed querying of the metadata payload without requiring schema changes as the fields evolve.
+| `assets.view_global_inventory` | Read assets across ALL locations |
+| `assets.manage_global_inventory` | Write/delete assets across ALL locations |
 
 ---
 
-## 3. Project Directory Structure
+### 3. Hybrid Database — JSONB + GIN Index
+
+> **Decision**: Use a strict relational trunk (`internal_tag`, `location`, `status`) combined with a `metadata_json` JSONB column for dynamic, type-specific attributes — instead of multi-table inheritance or EAV.
+
+```python
+class Asset(models.Model):
+    internal_tag  = models.CharField(max_length=50, unique=True)
+    location      = models.ForeignKey(Location, on_delete=models.PROTECT)
+    status        = models.CharField(choices=STATUS_CHOICES)
+    metadata_json = models.JSONField(default=dict, blank=True)  # ← JSONB
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['location', 'status']),
+            GinIndex(fields=['metadata_json']),  # ← O(1) lookups inside JSON
+        ]
+```
+
+**Why this matters**:
+
+- A **laptop** stores `{"type": "laptop", "mac_address": "AA:BB:...", "cpu": "i7"}`.
+- A **license** stores `{"type": "license", "tenant": "Contoso"}`.
+- Adding a new asset type (e.g., `"monitor"`) requires **zero migrations** — only a schema update.
+- The **GIN index** ensures that queries like `WHERE metadata_json @> '{"type": "laptop"}'` execute at index speed, not via sequential scan.
+
+---
+
+### 4. Declarative Validation — jsonschema
+
+> **Decision**: Protect the JSONB column with a `jsonschema` contract in the DRF serializer — not with imperative `if/else` chains in Python.
+
+```python
+ASSET_METADATA_SCHEMA = {
+    "type": "object",
+    "required": ["type"],
+    "properties": {
+        "type": {"type": "string", "enum": ["laptop", "license", "mobile"]}
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"type": {"const": "laptop"}}},
+            "then": {
+                "properties": {
+                    "mac_address": {"type": "string", "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"},
+                    "cpu": {"type": "string"}
+                }
+            }
+        },
+        {
+            "if": {"properties": {"type": {"const": "license"}}},
+            "then": {
+                "required": ["tenant"],
+                "properties": {"tenant": {"type": "string"}}
+            }
+        }
+    ]
+}
+```
+
+**Design trade-off**: Technical fields like `mac_address` and `cpu` are validated **if present** but are not required. This prevents blocking logistics operators who register assets before technical details are available. However, the `tenant` field for licenses **is** required because a license without an owner is semantically useless.
+
+The validation fires at the serializer layer — before any database write:
+
+```python
+def validate_metadata_json(self, value):
+    jsonschema.validate(instance=value, schema=ASSET_METADATA_SCHEMA)
+    return value
+```
+
+---
+
+### 5. Cache & Performance — Redis Write-Through
+
+> **Decision**: Cache heavy `GET /inventory/` responses per-user in Redis with a **reactive invalidation** pattern — purge only the cache of the user who mutates, not the entire cache.
+
+```python
+# AssetViewSet.list() — Read path
+cache_key = f"inventory_user_{request.user.id}_loc_{location_id}"
+cached_data = cache.get(cache_key)
+if cached_data:
+    return Response(cached_data)  # Served from Redis (~0.1ms)
+
+# AssetViewSet.perform_create/update/destroy() — Write path
+def _invalidate_user_cache(self):
+    pattern = f"inventory_user_{self.request.user.id}_*"
+    cache.delete_pattern(pattern)  # Purge only THIS user's stale entries
+```
+
+**Cache configuration** (`core/settings.py`):
+
+```python
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SERIALIZER": "django_redis.serializers.pickle.PickleSerializer",
+        }
+    }
+}
+CACHE_TTL = 60 * 15  # 15-minute TTL fallback
+```
+
+**Why per-user invalidation?** If User A creates an asset and we flush the entire cache, we force Users B through Z to re-query PostgreSQL on their next request. By scoping invalidation to User A's keys, we maintain O(1) cache hits for everyone else while guaranteeing that User A sees fresh data immediately.
+
+---
+
+### 6. Security Hardening — Pickle RCE Mitigation
+
+> **Decision**: We chose `PickleSerializer` for Redis (maximum serialization speed for complex Django QuerySets), but Pickle deserialization from an untrusted source enables **Remote Code Execution (RCE)**. We mitigate this by requiring authentication on the Redis container.
+
+```yaml
+# docker-compose.yml
+redis:
+  image: redis:7-alpine
+  command: redis-server --requirepass "T3mpP@ssw0rd2026!"
+  ports:
+    - "127.0.0.1:6379:6379"  # Loopback-only — never exposed to network
+```
+
+```yaml
+backend:
+  environment:
+    - REDIS_URL=redis://:T3mpP@ssw0rd2026!@redis:6379/0
+```
+
+**Threat model**: If an attacker gains network access to an unauthenticated Redis instance, they can inject a crafted Pickle payload that executes arbitrary code when deserialized by the Django backend. By enforcing `--requirepass` and binding to `127.0.0.1`, we eliminate the two primary attack vectors: network exposure and anonymous access.
+
+---
+
+### 7. Compliance Engine — Audit Middleware
+
+> **Decision**: Every state-mutating HTTP request (`POST`, `PUT`, `PATCH`, `DELETE`) that returns a `2xx` is automatically logged by `AuditMiddleware` — with zero view-level code.
+
+```python
+class AuditMiddleware:
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.method in ['POST', 'PUT', 'PATCH', 'DELETE'] and 200 <= response.status_code < 300:
+            if hasattr(request, 'user') and request.user.is_authenticated:
+                AuditLog.objects.create(
+                    actor=request.user,        # FK with on_delete=PROTECT
+                    action=request.method,
+                    entity_type=request.path,
+                    ip_address=request.META.get('REMOTE_ADDR', '0.0.0.0'),
+                    metadata_json={
+                        "status_code": response.status_code,
+                        "user_agent": request.META.get('HTTP_USER_AGENT', 'Unknown')
+                    }
+                )
+        return response
+```
+
+**`on_delete=models.PROTECT`**: The `actor` foreign key blocks deletion of any user who has audit records. This is a deliberate, hard database-level constraint — the legal chain of custody cannot be broken through a UI action.
+
+**JSONB storage**: The `metadata_json` field uses PostgreSQL's native `jsonb` type, enabling indexed queries over the audit payload without schema changes as the captured fields evolve.
+
+---
+
+## Project Structure
 
 ```
 CoreAsset-RBAC-Inventory-Engine/
 │
-├── docker-compose.yml              # Orchestrates all services (db, redis, backend, frontend)
+├── docker-compose.yml              # 4 services: db, redis, backend, frontend
 │
 ├── backend/                        # Django application root
-│   ├── Dockerfile                  # python:3.11-slim image, Poetry install
-│   ├── manage.py                   # Django management entry point
-│   ├── pyproject.toml              # Poetry project definition & dependency pins
-│   ├── poetry.lock                 # Deterministic dependency lock file
+│   ├── Dockerfile                  # python:3.11-slim + Poetry
+│   ├── manage.py
+│   ├── pyproject.toml              # Dependency definitions (Poetry)
+│   ├── poetry.lock                 # Deterministic lock file
 │   │
-│   ├── core/                       # Django project settings package
-│   │   ├── settings.py             # DRF, CORS, CSRF, DB, Middleware config
-│   │   ├── urls.py                 # Root URL dispatcher
+│   ├── core/                       # Django project configuration
+│   │   ├── settings.py             # DRF, CORS, CSRF, Redis, DB, Middleware
+│   │   ├── urls.py                 # Root URL dispatcher (api/v1/ namespace)
 │   │   ├── asgi.py
 │   │   └── wsgi.py
 │   │
-│   ├── users/                      # IAM — User model & authentication endpoints
-│   │   ├── models.py               # Custom User (UUID PK, is_mfa_enabled)
+│   ├── users/                      # IAM — Identity & Session Management
+│   │   ├── models.py               # User (UUID PK, assigned_locations M2M)
 │   │   ├── serializers.py          # UserSerializer, AssignRoleSerializer
-│   │   ├── views.py                # LoginView, LogoutView, UserMeView, UserViewSet
-│   │   ├── urls.py                 # /login/ /logout/ /me/ /inventory/ routing
-│   │   ├── admin.py
-│   │   └── migrations/
+│   │   ├── views.py                # Login, Logout, Me, UserViewSet
+│   │   ├── urls.py                 # /login/ /logout/ /me/ /inventory/
+│   │   └── admin.py
 │   │
 │   ├── rbac/                       # Role-Based Access Control
 │   │   ├── models.py               # Role (Proxy → auth_group)
 │   │   ├── serializers.py          # RoleSerializer
 │   │   ├── views.py                # RoleViewSet (CRUD)
-│   │   ├── urls.py                 # /roles/ routing
-│   │   ├── admin.py
-│   │   └── migrations/
+│   │   ├── urls.py                 # /roles/
+│   │   └── admin.py
+│   │
+│   ├── assets/                     # Inventory Engine (JSONB + GIN)
+│   │   ├── models.py               # Location, Asset (JSONB, GIN index)
+│   │   ├── permissions.py          # IsLocationManagerStrict
+│   │   ├── serializers.py          # AssetSerializer (jsonschema validation)
+│   │   ├── views.py                # AssetViewSet (Redis cache + scope filter)
+│   │   ├── urls.py                 # /locations/ /inventory/
+│   │   └── admin.py
 │   │
 │   └── audit/                      # Compliance Engine
-│       ├── middleware.py           # AuditMiddleware (intercepts all mutations)
+│       ├── middleware.py            # AuditMiddleware (intercepts all mutations)
 │       ├── models.py               # AuditLog (JSONB, PROTECT FK, UUID PK)
-│       ├── admin.py
-│       └── migrations/
+│       └── admin.py
 │
-└── frontend/                       # White-label frontend (separate service)
+└── frontend/                       # Separate service (see linked repo)
     └── Dockerfile
 ```
 
 ---
 
-## 4. API Reference
+## Prerequisites
 
-All endpoints are prefixed with `/api/`. Authentication state is managed via session cookies — the client must first obtain a CSRF token via the login flow.
+| Tool | Version | Purpose |
+|---|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | ≥ 24.x | Container runtime with Compose v2 |
+| [Git](https://git-scm.com/) | ≥ 2.x | Version control |
 
-### Authentication
-
-| Method | Endpoint | Auth Required | Description |
-|---|---|---|---|
-| `POST` | `/api/users/login/` | No | Initiates session, sets `sessionid` + `csrftoken` cookies |
-| `GET` | `/api/users/me/` | Yes | Returns the authenticated user's profile |
-| `POST` | `/api/users/logout/` | Yes | Destroys the server-side session |
-
-### User Inventory
-
-| Method | Endpoint | Auth Required | Description |
-|---|---|---|---|
-| `GET` | `/api/users/inventory/` | Yes | List all users |
-| `POST` | `/api/users/inventory/` | Yes | Create a new user |
-| `GET` | `/api/users/inventory/{uuid}/` | Yes | Retrieve a specific user |
-| `PUT` | `/api/users/inventory/{uuid}/` | Yes | Full update of a user |
-| `PATCH` | `/api/users/inventory/{uuid}/` | Yes | Partial update of a user |
-| `DELETE` | `/api/users/inventory/{uuid}/` | Yes | Delete a user |
-| `POST` | `/api/users/inventory/{uuid}/assign-roles/` | Yes | **RPC** — Overwrite the user's role set |
-
-### Role Management (RBAC)
-
-| Method | Endpoint | Auth Required | Description |
-|---|---|---|---|
-| `GET` | `/api/rbac/roles/` | Yes | List all roles |
-| `POST` | `/api/rbac/roles/` | Yes | Create a new role |
-| `GET` | `/api/rbac/roles/{id}/` | Yes | Retrieve a specific role |
-| `PUT` | `/api/rbac/roles/{id}/` | Yes | Update a role |
-| `DELETE` | `/api/rbac/roles/{id}/` | Yes | Delete a role |
-
-**`POST /api/users/inventory/{uuid}/assign-roles/` — Request Body:**
-```json
-{
-  "role_ids": [1, 3]
-}
-```
+No local Python, PostgreSQL, or Redis installation is required. Everything runs inside Docker.
 
 ---
 
-## 5. Local Installation & Deployment
+## Installation & Local Deployment
 
-### Prerequisites
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (with Compose v2)
-- [Git](https://git-scm.com/)
-
-### Step 1 — Clone the repository
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/CrisLottz/CoreAsset-RBAC-Inventory-Engine.git
 cd CoreAsset-RBAC-Inventory-Engine
 ```
 
-### Step 2 — Build and start all services
+### 2. Build and start all services
 
 ```bash
 docker compose up --build
 ```
 
-> On first run, Docker will build the `python:3.11-slim` backend image and install all Poetry-managed dependencies. This takes ~60–90 seconds. Subsequent starts are near-instant.
+> First build takes ~60–90s (Python image + Poetry dependency install). Subsequent starts are near-instant.
 
-### Step 3 — Apply database migrations
+### 3. Apply database migrations
 
-In a second terminal, while the containers are running:
+Open a second terminal:
 
 ```bash
 docker compose exec backend python manage.py migrate
 ```
 
-This applies all DDL changes defined in the `migrations/` directories of `users`, `rbac`, and `audit`, creating the necessary tables in PostgreSQL.
-
-### Step 4 — Create a superuser
+### 4. Create a superuser
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-Follow the interactive prompt to set `username`, `email`, and `password`. This account has unrestricted access to the Django Admin panel (`http://127.0.0.1:8000/admin/`) and all API endpoints.
-
-### Step 5 — Verify the stack
+### 5. Verify the stack
 
 | Service | URL |
 |---|---|
-| API Root | `http://127.0.0.1:8000/api/` |
-| Django Admin | `http://127.0.0.1:8000/admin/` |
-| Frontend (dev) | `http://127.0.0.1:5173/` |
+| Swagger UI (API Docs) | [http://127.0.0.1:8000/api/v1/docs/](http://127.0.0.1:8000/api/v1/docs/) |
+| OpenAPI Schema (YAML) | [http://127.0.0.1:8000/api/v1/schema/](http://127.0.0.1:8000/api/v1/schema/) |
+| Django Admin | [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/) |
+| Frontend (dev) | [http://127.0.0.1:5173/](http://127.0.0.1:5173/) |
 
-To stop all services cleanly:
-
-```bash
-docker compose down
-```
-
-To stop and **destroy the database volume** (full reset):
+### Shutdown
 
 ```bash
-docker compose down -v
+docker compose down       # Stop services, preserve data
+docker compose down -v    # Stop services + destroy database volume (full reset)
 ```
 
 ---
 
-## 6. Production Standards
+## API Documentation
 
-### Schema Migrations (DDL as Code)
+This project uses [**drf-spectacular**](https://drf-spectacular.readthedocs.io/) to auto-generate an OpenAPI 3.0 schema from the DRF codebase. The interactive Swagger UI is served at:
 
-All database schema changes are executed **exclusively through Django migrations**. No raw DDL is applied manually to the database. This ensures that the schema history is version-controlled, reproducible across environments, and reversible.
+```
+http://127.0.0.1:8000/api/v1/docs/
+```
 
-> ⚠️ Never run `ALTER TABLE` or `CREATE TABLE` commands directly against the production database. Generate a migration with `python manage.py makemigrations` and apply it with `python manage.py migrate`.
+The raw OpenAPI schema (JSON/YAML) is available at:
 
-### Network Security
+```
+http://127.0.0.1:8000/api/v1/schema/
+```
 
-- All Docker service ports are bound to `127.0.0.1` (loopback) in the Compose configuration. In a production deployment behind a reverse proxy (e.g., Nginx, Caddy), only port `80`/`443` should be exposed externally. The database and Redis ports must never be publicly reachable.
-- `SECRET_KEY` must be rotated and injected via environment variables (e.g., Docker secrets, AWS Secrets Manager) — never hardcoded in `settings.py`.
-- `DEBUG = False` must be enforced in all production environments. Set `ALLOWED_HOSTS` to the exact production domain.
-- `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` must be narrowed to the production frontend domain only.
+Both endpoints are live when the backend container is running. Admin routes are excluded from the public schema.
 
-### Dependency Integrity
+---
 
-The `poetry.lock` file pins every package and its transitive dependencies to an exact version and hash. Commit this file to version control. In CI/CD pipelines, use `poetry install --no-root` to ensure reproducible builds without implicit upgrades.
+## API Reference
+
+All endpoints are versioned under `/api/v1/`. Authentication is managed via session cookies — the client must first call the login endpoint to establish a session.
+
+### Authentication
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/v1/users/login/` | ✗ | Authenticate and receive `sessionid` + `csrftoken` cookies |
+| `GET` | `/api/v1/users/me/` | ✓ | Return the authenticated user's profile |
+| `POST` | `/api/v1/users/logout/` | ✓ | Destroy the server-side session |
+
+### User Management
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/users/inventory/` | ✓ | List all users |
+| `POST` | `/api/v1/users/inventory/` | ✓ | Create a user |
+| `GET` | `/api/v1/users/inventory/{uuid}/` | ✓ | Retrieve a user |
+| `PUT/PATCH` | `/api/v1/users/inventory/{uuid}/` | ✓ | Update a user |
+| `DELETE` | `/api/v1/users/inventory/{uuid}/` | ✓ | Delete a user |
+| `POST` | `/api/v1/users/inventory/{uuid}/assign-roles/` | ✓ | **RPC** — Overwrite user's role set |
+
+### Roles (RBAC)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/rbac/roles/` | ✓ | List all roles |
+| `POST` | `/api/v1/rbac/roles/` | ✓ | Create a role |
+| `GET` | `/api/v1/rbac/roles/{id}/` | ✓ | Retrieve a role |
+| `PUT/PATCH` | `/api/v1/rbac/roles/{id}/` | ✓ | Update a role |
+| `DELETE` | `/api/v1/rbac/roles/{id}/` | ✓ | Delete a role |
+
+### Asset Inventory
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/assets/inventory/` | ✓ | List assets (filtered by user's location scope) |
+| `POST` | `/api/v1/assets/inventory/` | ✓ | Create an asset (location-gated) |
+| `GET` | `/api/v1/assets/inventory/{uuid}/` | ✓ | Retrieve an asset |
+| `PUT/PATCH` | `/api/v1/assets/inventory/{uuid}/` | ✓ | Update an asset (location-gated) |
+| `DELETE` | `/api/v1/assets/inventory/{uuid}/` | ✓ | Delete an asset (location-gated) |
+
+**Query parameters**: `?location_id={uuid}` — Filter assets by a specific location.
+
+### Locations
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/assets/locations/` | ✓ | List all locations |
+| `POST` | `/api/v1/assets/locations/` | ✓ | Create a location |
+| `GET` | `/api/v1/assets/locations/{uuid}/` | ✓ | Retrieve a location |
+| `PUT/PATCH` | `/api/v1/assets/locations/{uuid}/` | ✓ | Update a location |
+| `DELETE` | `/api/v1/assets/locations/{uuid}/` | ✓ | Delete a location |
+
+---
+
+## Production Checklist
+
+| Area | Requirement |
+|---|---|
+| **Secret Key** | Rotate `SECRET_KEY` via environment variable (Docker secrets, AWS SSM). Never hardcode. |
+| **Debug Mode** | Set `DEBUG = False`. Configure `ALLOWED_HOSTS` to the production domain. |
+| **CORS / CSRF** | Narrow `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS` to the production frontend domain only. |
+| **Redis Password** | Replace the development password with a strong, rotated secret via environment variable. |
+| **Network** | All Docker ports are already bound to `127.0.0.1`. In production, place behind a reverse proxy (Nginx/Caddy) exposing only `443`. |
+| **Migrations** | All DDL is executed exclusively via `python manage.py migrate`. Never run raw `ALTER TABLE` against production. |
+| **Dependencies** | `poetry.lock` pins every transitive dependency. Use `poetry install --no-root` in CI/CD for reproducible builds. |
 
 ---
 
 ---
----
-
-# CoreAsset — RBAC Inventory Engine *(Traducción al Español)*
-
-> **API Headless · Grado Empresarial · Lista para White-Label**
-
-Un núcleo de backend blindado y libre de estado para plataformas empresariales que exigen **gobernanza de identidades**, **rastreo de activos físicos y virtuales**, y **pistas de auditoría a prueba de manipulaciones**. Construido como una API Headless componible, está diseñado para impulsar cualquier frontend de marca blanca sin acoplarse a una capa de interfaz específica.
 
 ---
+
+<div align="center">
+
+# CoreAsset — Inventory Management Headless API
+
+**Motor Backend Multi-Tenant para Rastreo de Activos, Gobernanza de Identidades y Cumplimiento Automatizado**
+
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Django](https://img.shields.io/badge/Django-5.2-092E20?style=for-the-badge&logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![DRF](https://img.shields.io/badge/Django_REST_Framework-3.17-A30000?style=for-the-badge)](https://www.django-rest-framework.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Swagger](https://img.shields.io/badge/OpenAPI-Swagger_UI-85EA2D?style=for-the-badge&logo=swagger&logoColor=black)](https://swagger.io/)
+[![Poetry](https://img.shields.io/badge/Poetry-Gestión_Deps-60A5FA?style=for-the-badge&logo=poetry&logoColor=white)](https://python-poetry.org/)
+[![License](https://img.shields.io/badge/Licencia-Propietaria-EF4444?style=for-the-badge)](#)
+
+---
+
+> **⚡ Arquitectura Desacoplada** — Este repositorio contiene **únicamente el motor API** (Backend Headless).
+>
+> El cliente web (Frontend) construido con **Astro / React** se encuentra en un repositorio separado:
+>
+> **🔗 [CoreAsset-InventoryManagement-web-client](https://github.com/CrisLottz/CoreAsset-InventoryManagement-web-client)**
+
+---
+
+</div>
 
 ## Tabla de Contenidos
 
-1. [Resumen Ejecutivo](#1-resumen-ejecutivo)
-2. [Arquitectura del Sistema — Los Cuatro Pilares](#2-arquitectura-del-sistema--los-cuatro-pilares)
-3. [Estructura de Directorios del Proyecto](#3-estructura-de-directorios-del-proyecto)
-4. [Referencia de la API](#4-referencia-de-la-api)
-5. [Instalación y Despliegue Local](#5-instalación-y-despliegue-local)
-6. [Estándares de Producción](#6-estándares-de-producción)
+- [Resumen](#resumen)
+- [Características Principales](#características-principales)
+- [Arquitectura y Decisiones de Diseño](#arquitectura-y-decisiones-de-diseño)
+  - [1. Autenticación por Sesión (Sin JWT)](#1-autenticación-por-sesión-sin-jwt)
+  - [2. RBAC y Permisos a Nivel de Objeto](#2-rbac-y-permisos-a-nivel-de-objeto)
+  - [3. Base de Datos Híbrida — JSONB + Índice GIN](#3-base-de-datos-híbrida--jsonb--índice-gin)
+  - [4. Validación Declarativa — jsonschema](#4-validación-declarativa--jsonschema)
+  - [5. Caché y Rendimiento — Redis Write-Through](#5-caché-y-rendimiento--redis-write-through)
+  - [6. Blindaje de Seguridad — Mitigación Pickle RCE](#6-blindaje-de-seguridad--mitigación-pickle-rce)
+  - [7. Motor de Cumplimiento — Middleware de Auditoría](#7-motor-de-cumplimiento--middleware-de-auditoría)
+- [Estructura del Proyecto](#estructura-del-proyecto)
+- [Prerrequisitos](#prerrequisitos)
+- [Instalación y Despliegue Local](#instalación-y-despliegue-local)
+- [Documentación de la API](#documentación-de-la-api)
+- [Referencia de la API](#referencia-de-la-api)
+- [Lista de Verificación para Producción](#lista-de-verificación-para-producción)
 
 ---
 
-## 1. Resumen Ejecutivo
+## Resumen
 
-CoreAsset-RBAC-Inventory-Engine es el núcleo de backend de una plataforma empresarial de gestión de activos con arquitectura White-Label. Expone una API RESTful construida con **Django 5 + Django REST Framework** y corre en un entorno completamente aislado con **Docker Compose** respaldado por **PostgreSQL 15**.
+CoreAsset es una API Headless de grado empresarial y marca blanca, diseñada para organizaciones que requieren **rastreo centralizado de activos físicos y virtuales**, **gobernanza de identidades con alcance geográfico** y **pistas de auditoría a prueba de manipulaciones** — todo detrás de una única interfaz REST componible.
 
-Su filosofía de diseño prioriza la **seguridad sobre la conveniencia**, la **trazabilidad sobre la velocidad** y la **componibilidad sobre el acoplamiento monolítico**. Cada decisión arquitectónica — desde la autenticación basada en sesiones hasta los metadatos de activos respaldados por JSONB — fue tomada para satisfacer los requisitos de cumplimiento empresarial sin sacrificar la ergonomía del desarrollador.
-
-**Capacidades del núcleo entregadas en la fase actual:**
-
-| Capacidad | Estado |
-|---|---|
-| Autenticación por sesión (Cookie + CSRF) | ✅ Listo para producción |
-| Modelo de Usuario con clave primaria UUID | ✅ Listo para producción |
-| RBAC mediante patrón Proxy Model de Django | ✅ Listo para producción |
-| Asignación granular de roles vía endpoint RPC | ✅ Listo para producción |
-| Pista de auditoría automática de mutaciones HTTP (JSONB) | ✅ Listo para producción |
-| Inventario de activos con columna de metadatos JSONB | 🔷 Planificado — Fase 2 |
-| Filtrado multi-sede para activos físicos | 🔷 Planificado — Fase 2 |
+El backend está completamente desacoplado de cualquier frontend. Se comunica exclusivamente a través de una API RESTful versionada (`/api/v1/`), permitiendo que cualquier cliente — SPA React, aplicación móvil o integración de terceros — consuma sus servicios sin acoplamiento.
 
 ---
 
-## 2. Arquitectura del Sistema — Los Cuatro Pilares
+## Características Principales
 
-### Pilar I — Infraestructura Contenerizada
-
-Todo el entorno de ejecución está aislado con **Docker Compose**, que define tres servicios independientes e interconectados en red:
-
-| Servicio | Imagen | Puerto expuesto (solo localhost) |
+| Dominio | Capacidad | Implementación |
 |---|---|---|
-| `db` | `postgres:15-alpine` | `127.0.0.1:5432` |
-| `redis` | `redis:7-alpine` | `127.0.0.1:6379` |
-| `backend` | Personalizada (`python:3.11-slim`) | `127.0.0.1:8000` |
-| `frontend` | Personalizada | `127.0.0.1:5173` |
-
-Todos los puertos están vinculados **exclusivamente a la interfaz de loopback** (`127.0.0.1`), asegurando que ningún servicio quede inadvertidamente expuesto a redes externas. Los datos de PostgreSQL se persisten en un volumen Docker con nombre (`postgres_data`).
-
-La gestión de dependencias dentro del contenedor del backend es manejada por **Poetry** (`pyproject.toml` + `poetry.lock`), que fija cada dependencia transitiva a un hash reproducible. Debido a que el contenedor ya es un entorno aislado, Poetry está configurado para instalar paquetes globalmente dentro de él (`virtualenvs.create = false`), evitando la sobrecarga de entornos virtuales redundantes.
+| **Autenticación** | Auth basada en sesión (Cookie + CSRF) | `SessionAuthentication` — sin JWT |
+| **Identidad (IAM)** | Modelo de Usuario con UUID v4 como PK | `users.User` → `AbstractUser` |
+| **RBAC** | Rol = Proxy sobre Group de Django | `rbac.Role` → `auth_group` (cero DDL) |
+| **Permisos** | Escritura acotada geográficamente por sede | Permiso de objeto `IsLocationManagerStrict` |
+| **Inventario** | Activos polimórficos via tronco relacional + JSONB | `Asset.metadata_json` + índice GIN |
+| **Validación** | Contratos de esquema declarativos sobre JSONB | `jsonschema` en serializadores DRF |
+| **Caché** | Caché Redis por usuario con invalidación reactiva | `django-redis` + serializador Pickle |
+| **Auditoría** | Registro automático de mutaciones via middleware HTTP | `AuditMiddleware` → `audit_logs` (JSONB) |
+| **Documentación** | Docs interactivos auto-generados | `drf-spectacular` → Swagger UI |
+| **Infraestructura** | Completamente contenerizado, puertos solo en loopback | Docker Compose (4 servicios) |
 
 ---
 
-### Pilar II — Seguridad y Autenticación (Sin JWT)
+## Arquitectura y Decisiones de Diseño
 
-Este sistema **deliberadamente no implementa JWT**. El modelo de autenticación se basa en la **Autenticación por Sesión nativa de Django** con **Cookies HTTP-only y tokens CSRF** — una arquitectura fundamentalmente más segura para clientes basados en navegador porque:
+Cada decisión documentada a continuación responde un **"¿por qué?"** específico — no solo qué hace el sistema, sino por qué la alternativa fue deliberadamente rechazada.
 
-- Las cookies de sesión son `HttpOnly` y no pueden ser leídas por JavaScript, eliminando el robo de tokens mediante XSS.
-- Cada solicitud mutante debe llevar un token CSRF válido, eliminando los ataques CSRF incluso con una cookie robada.
-- La invalidación de sesión es del lado del servidor e inmediata — revocar el acceso no requiere listas negras de tokens.
+### 1. Autenticación por Sesión (Sin JWT)
 
-La configuración de DRF impone este contrato globalmente:
+> **Decisión**: Usar `SessionAuthentication` (Cookies HTTP-only + tokens CSRF) en lugar de JWT.
 
 ```python
+# core/settings.py
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
     'DEFAULT_PERMISSION_CLASSES':     ['rest_framework.permissions.IsAuthenticated'],
 }
 ```
 
-Las políticas de CORS y CSRF están estrictamente acotadas al origen del frontend (`http://localhost:5173` en desarrollo), y `CORS_ALLOW_CREDENTIALS = True` permite la transmisión de cookies entre orígenes sin relajar el límite de confianza.
+**¿Por qué no JWT?**
+
+| Preocupación | Cookies de Sesión | JWT |
+|---|---|---|
+| Robo de token vía XSS | ✅ Inmune — cookies `HttpOnly` invisibles a JS | ❌ Tokens en `localStorage` son legibles por cualquier script |
+| Revocación de sesión | ✅ Instantánea — el servidor elimina la fila de sesión | ❌ Requiere infraestructura de lista negra de tokens |
+| Protección CSRF | ✅ Integrada — Django exige `csrftoken` en cada mutación | ⚠️ No aplica (stateless) |
+| Gestión de tokens | ✅ El navegador gestiona el ciclo de vida de la cookie | ❌ El desarrollador debe implementar lógica de refresh/rotación |
+
+Los límites de confianza de CORS y CSRF están acotados exclusivamente al origen del frontend:
+
+```python
+CORS_ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+```
 
 ---
 
-### Pilar III — Gestión de Identidades y Accesos (IAM / RBAC)
+### 2. RBAC y Permisos a Nivel de Objeto
 
-**Modelo de Usuario Personalizado**
+> **Decisión**: Los permisos no son globales. El acceso de escritura está acotado geográficamente — un manager en Denver **no puede** modificar activos en Utah, ni siquiera mediante inyección directa a la API.
 
-El modelo `User` (`users.User`) extiende el `AbstractUser` de Django con dos sobreescrituras críticas:
+El sistema implementa dos capas de control de acceso:
 
-- **UUID v4 como clave primaria** — elimina los ataques de enumeración de IDs secuenciales y es globalmente único por construcción.
-- **Indicador `is_mfa_enabled`** — fundamento para la futura aplicación de autenticación multifactor.
-
-```python
-class User(AbstractUser):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    is_mfa_enabled = models.BooleanField(default=False)
-```
-
-**Gestión de Roles vía Proxy Model**
-
-En lugar de introducir una tabla `Role` separada y no relacionada y duplicar la infraestructura de permisos de Django, el modelo `rbac.Role` se implementa como un **Proxy Model** sobre el `Group` nativo de Django:
+**Capa 1 — Rol como Proxy Model** (`rbac/models.py`)
 
 ```python
 class Role(Group):
     class Meta:
-        proxy = True
-        app_label = 'rbac'
+        proxy = True  # Sin tabla nueva. Usa auth_group. Todos los decoradores de Django funcionan.
 ```
 
-Esto significa que:
-- No se crea ninguna tabla DDL nueva — los objetos `Role` se almacenan en `auth_group`.
-- Todos los decoradores de permisos integrados de Django (`@permission_required`, `user.has_perm()`) funcionan desde el primer momento.
-- El dominio de negocio usa el vocabulario "Rol" mientras que el ORM usa la infraestructura `Group` probada en batalla.
+**Capa 2 — Permisos de Objeto con Alcance Geográfico** (`assets/permissions.py`)
 
-**Asignación Granular de Roles vía Endpoint RPC Explícito**
-
-La asignación de roles nunca es un efecto secundario silencioso de una llamada `PATCH /users/{id}/`. Es una acción explícita, intencional y auditable expuesta como un endpoint dedicado de estilo RPC:
-
+```python
+class IsLocationManagerStrict(permissions.BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_superuser or request.user.has_perm('assets.manage_global_inventory'):
+            return True
+        # Compuerta geográfica: user.assigned_locations debe incluir la sede del activo
+        location = obj if hasattr(obj, 'name') else obj.location
+        return request.user.assigned_locations.filter(id=location.id).exists()
 ```
-POST /api/users/inventory/{uuid}/assign-roles/
+
+El modelo `User` lleva un `ManyToManyField` hacia `Location`, creando un alcance geográfico por usuario. El `AssetViewSet.get_queryset()` pre-filtra los resultados a nivel de base de datos (no en Python), asegurando que incluso las peticiones `GET` respeten el límite:
+
+```python
+if not user.is_superuser and not user.has_perm('assets.view_global_inventory'):
+    queryset = queryset.filter(location__in=user.assigned_locations.all())
 ```
 
-Esto garantiza que un desarrollador no pueda sobrescribir accidentalmente los roles de un usuario mientras actualiza su perfil — las operaciones están separadas arquitectónicamente.
+**Permisos personalizados a nivel de modelo** proporcionan granularidad adicional:
 
----
-
-### Pilar IV — Motor de Cumplimiento (Middleware de Auditoría)
-
-Cada solicitud HTTP que muta estado — `POST`, `PUT`, `PATCH`, `DELETE` — que devuelve una respuesta `2xx` exitosa es **interceptada automáticamente** por `audit.middleware.AuditMiddleware` y registrada en la tabla `audit_logs` sin ninguna participación de código a nivel de vista.
-
-Cada registro de auditoría captura:
-
-| Campo | Contenido |
+| Codename del Permiso | Efecto |
 |---|---|
-| `id` | UUID v4 (clave primaria inmutable) |
-| `actor` | FK → `User` autenticado (`PROTECT`) |
-| `action` | Método HTTP (`POST`, `PUT`, etc.) |
-| `entity_type` | Ruta de la solicitud (URL) |
-| `entity_id` | UUID del recurso afectado |
-| `ip_address` | IP del cliente desde `REMOTE_ADDR` |
-| `metadata_json` | Blob JSONB: `status_code`, `user_agent` |
-| `created_at` | Marca de tiempo UTC auto-establecida |
-
-**Cadena de custodia protegida**: La clave foránea `actor` usa `on_delete=models.PROTECT`. Esto significa que eliminar un usuario que tiene registros de auditoría es un **bloqueo duro a nivel de base de datos** — la integridad de la pista de auditoría legal no puede ser destruida mediante una acción de interfaz de usuario.
-
-**Almacenamiento JSONB** (`models.JSONField` → PostgreSQL `jsonb`) permite consultas indexadas nativas del payload de metadatos sin requerir cambios de esquema a medida que los campos evolucionan.
+| `assets.view_global_inventory` | Leer activos de TODAS las sedes |
+| `assets.manage_global_inventory` | Escribir/eliminar activos de TODAS las sedes |
 
 ---
 
-## 3. Estructura de Directorios del Proyecto
+### 3. Base de Datos Híbrida — JSONB + Índice GIN
+
+> **Decisión**: Usar un tronco relacional estricto (`internal_tag`, `location`, `status`) combinado con una columna `metadata_json` de tipo JSONB para atributos dinámicos específicos por tipo — en lugar de herencia multi-tabla o EAV.
+
+```python
+class Asset(models.Model):
+    internal_tag  = models.CharField(max_length=50, unique=True)
+    location      = models.ForeignKey(Location, on_delete=models.PROTECT)
+    status        = models.CharField(choices=STATUS_CHOICES)
+    metadata_json = models.JSONField(default=dict, blank=True)  # ← JSONB
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['location', 'status']),
+            GinIndex(fields=['metadata_json']),  # ← Búsquedas O(1) dentro del JSON
+        ]
+```
+
+**Por qué esto importa**:
+
+- Una **laptop** almacena `{"type": "laptop", "mac_address": "AA:BB:...", "cpu": "i7"}`.
+- Una **licencia** almacena `{"type": "license", "tenant": "Contoso"}`.
+- Agregar un nuevo tipo de activo (ej. `"monitor"`) requiere **cero migraciones** — solo una actualización del esquema.
+- El **índice GIN** garantiza que consultas como `WHERE metadata_json @> '{"type": "laptop"}'` se ejecuten a velocidad de índice, no mediante escaneo secuencial.
+
+---
+
+### 4. Validación Declarativa — jsonschema
+
+> **Decisión**: Proteger la columna JSONB con un contrato `jsonschema` en el serializador de DRF — no con cadenas imperativas `if/else` en Python.
+
+```python
+ASSET_METADATA_SCHEMA = {
+    "type": "object",
+    "required": ["type"],
+    "properties": {
+        "type": {"type": "string", "enum": ["laptop", "license", "mobile"]}
+    },
+    "allOf": [
+        {
+            "if": {"properties": {"type": {"const": "laptop"}}},
+            "then": {
+                "properties": {
+                    "mac_address": {"type": "string", "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"},
+                    "cpu": {"type": "string"}
+                }
+            }
+        },
+        {
+            "if": {"properties": {"type": {"const": "license"}}},
+            "then": {
+                "required": ["tenant"],
+                "properties": {"tenant": {"type": "string"}}
+            }
+        }
+    ]
+}
+```
+
+**Compromiso de diseño**: Los campos técnicos como `mac_address` y `cpu` se validan **si están presentes** pero no son obligatorios. Esto evita bloquear a los operadores de logística que registran activos antes de que los detalles técnicos estén disponibles. Sin embargo, el campo `tenant` para licencias **sí es obligatorio** porque una licencia sin propietario es semánticamente inútil.
+
+La validación se ejecuta en la capa del serializador — antes de cualquier escritura en base de datos:
+
+```python
+def validate_metadata_json(self, value):
+    jsonschema.validate(instance=value, schema=ASSET_METADATA_SCHEMA)
+    return value
+```
+
+---
+
+### 5. Caché y Rendimiento — Redis Write-Through
+
+> **Decisión**: Cachear las respuestas pesadas de `GET /inventory/` por usuario en Redis con un patrón de **invalidación reactiva** — purgar solo la caché del usuario que realiza la mutación, no la caché completa.
+
+```python
+# AssetViewSet.list() — Ruta de lectura
+cache_key = f"inventory_user_{request.user.id}_loc_{location_id}"
+cached_data = cache.get(cache_key)
+if cached_data:
+    return Response(cached_data)  # Servido desde Redis (~0.1ms)
+
+# AssetViewSet.perform_create/update/destroy() — Ruta de escritura
+def _invalidate_user_cache(self):
+    pattern = f"inventory_user_{self.request.user.id}_*"
+    cache.delete_pattern(pattern)  # Purga solo las entradas obsoletas de ESTE usuario
+```
+
+**Configuración de caché** (`core/settings.py`):
+
+```python
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SERIALIZER": "django_redis.serializers.pickle.PickleSerializer",
+        }
+    }
+}
+CACHE_TTL = 60 * 15  # TTL de respaldo de 15 minutos
+```
+
+**¿Por qué invalidación por usuario?** Si el Usuario A crea un activo y purgamos toda la caché, forzamos a los Usuarios B hasta Z a re-consultar PostgreSQL en su siguiente petición. Al acotar la invalidación a las claves del Usuario A, mantenemos cache hits O(1) para todos los demás mientras garantizamos que el Usuario A vea datos frescos inmediatamente.
+
+---
+
+### 6. Blindaje de Seguridad — Mitigación Pickle RCE
+
+> **Decisión**: Elegimos `PickleSerializer` para Redis (máxima velocidad de serialización para QuerySets complejos de Django), pero la deserialización de Pickle desde una fuente no confiable habilita **Ejecución Remota de Código (RCE)**. Mitigamos esto requiriendo autenticación en el contenedor de Redis.
+
+```yaml
+# docker-compose.yml
+redis:
+  image: redis:7-alpine
+  command: redis-server --requirepass "T3mpP@ssw0rd2026!"
+  ports:
+    - "127.0.0.1:6379:6379"  # Solo loopback — nunca expuesto a la red
+```
+
+```yaml
+backend:
+  environment:
+    - REDIS_URL=redis://:T3mpP@ssw0rd2026!@redis:6379/0
+```
+
+**Modelo de amenaza**: Si un atacante obtiene acceso de red a una instancia de Redis sin autenticación, puede inyectar un payload Pickle diseñado que ejecuta código arbitrario cuando es deserializado por el backend de Django. Al forzar `--requirepass` y vincular a `127.0.0.1`, eliminamos los dos vectores de ataque principales: exposición de red y acceso anónimo.
+
+---
+
+### 7. Motor de Cumplimiento — Middleware de Auditoría
+
+> **Decisión**: Toda petición HTTP que muta estado (`POST`, `PUT`, `PATCH`, `DELETE`) y retorna un `2xx` es automáticamente registrada por `AuditMiddleware` — con cero código a nivel de vista.
+
+```python
+class AuditMiddleware:
+    def __call__(self, request):
+        response = self.get_response(request)
+        if request.method in ['POST', 'PUT', 'PATCH', 'DELETE'] and 200 <= response.status_code < 300:
+            if hasattr(request, 'user') and request.user.is_authenticated:
+                AuditLog.objects.create(
+                    actor=request.user,        # FK con on_delete=PROTECT
+                    action=request.method,
+                    entity_type=request.path,
+                    ip_address=request.META.get('REMOTE_ADDR', '0.0.0.0'),
+                    metadata_json={
+                        "status_code": response.status_code,
+                        "user_agent": request.META.get('HTTP_USER_AGENT', 'Unknown')
+                    }
+                )
+        return response
+```
+
+**`on_delete=models.PROTECT`**: La clave foránea `actor` bloquea la eliminación de cualquier usuario que tenga registros de auditoría. Esta es una restricción deliberada y dura a nivel de base de datos — la cadena de custodia legal no puede romperse a través de una acción de interfaz de usuario.
+
+**Almacenamiento JSONB**: El campo `metadata_json` usa el tipo `jsonb` nativo de PostgreSQL, habilitando consultas indexadas sobre el payload de auditoría sin cambios de esquema a medida que los campos capturados evolucionen.
+
+---
+
+## Estructura del Proyecto
 
 ```
 CoreAsset-RBAC-Inventory-Engine/
 │
-├── docker-compose.yml              # Orquesta todos los servicios (db, redis, backend, frontend)
+├── docker-compose.yml              # 4 servicios: db, redis, backend, frontend
 │
 ├── backend/                        # Raíz de la aplicación Django
-│   ├── Dockerfile                  # Imagen python:3.11-slim, instalación con Poetry
-│   ├── manage.py                   # Punto de entrada de gestión de Django
-│   ├── pyproject.toml              # Definición del proyecto Poetry y fijación de dependencias
-│   ├── poetry.lock                 # Archivo de bloqueo determinista de dependencias
+│   ├── Dockerfile                  # python:3.11-slim + Poetry
+│   ├── manage.py
+│   ├── pyproject.toml              # Definiciones de dependencias (Poetry)
+│   ├── poetry.lock                 # Archivo de bloqueo determinista
 │   │
-│   ├── core/                       # Paquete de configuración del proyecto Django
-│   │   ├── settings.py             # Config de DRF, CORS, CSRF, BD, Middleware
-│   │   ├── urls.py                 # Despachador de URLs raíz
+│   ├── core/                       # Configuración del proyecto Django
+│   │   ├── settings.py             # DRF, CORS, CSRF, Redis, BD, Middleware
+│   │   ├── urls.py                 # Despachador de URLs raíz (namespace api/v1/)
 │   │   ├── asgi.py
 │   │   └── wsgi.py
 │   │
-│   ├── users/                      # IAM — Modelo de usuario y endpoints de autenticación
-│   │   ├── models.py               # Usuario personalizado (UUID PK, is_mfa_enabled)
+│   ├── users/                      # IAM — Identidad y Gestión de Sesiones
+│   │   ├── models.py               # User (UUID PK, assigned_locations M2M)
 │   │   ├── serializers.py          # UserSerializer, AssignRoleSerializer
-│   │   ├── views.py                # LoginView, LogoutView, UserMeView, UserViewSet
-│   │   ├── urls.py                 # Enrutamiento /login/ /logout/ /me/ /inventory/
-│   │   ├── admin.py
-│   │   └── migrations/
+│   │   ├── views.py                # Login, Logout, Me, UserViewSet
+│   │   ├── urls.py                 # /login/ /logout/ /me/ /inventory/
+│   │   └── admin.py
 │   │
 │   ├── rbac/                       # Control de Acceso Basado en Roles
 │   │   ├── models.py               # Role (Proxy → auth_group)
 │   │   ├── serializers.py          # RoleSerializer
 │   │   ├── views.py                # RoleViewSet (CRUD)
-│   │   ├── urls.py                 # Enrutamiento /roles/
-│   │   ├── admin.py
-│   │   └── migrations/
+│   │   ├── urls.py                 # /roles/
+│   │   └── admin.py
+│   │
+│   ├── assets/                     # Motor de Inventario (JSONB + GIN)
+│   │   ├── models.py               # Location, Asset (JSONB, índice GIN)
+│   │   ├── permissions.py          # IsLocationManagerStrict
+│   │   ├── serializers.py          # AssetSerializer (validación jsonschema)
+│   │   ├── views.py                # AssetViewSet (caché Redis + filtro de alcance)
+│   │   ├── urls.py                 # /locations/ /inventory/
+│   │   └── admin.py
 │   │
 │   └── audit/                      # Motor de Cumplimiento
-│       ├── middleware.py           # AuditMiddleware (intercepta todas las mutaciones)
+│       ├── middleware.py            # AuditMiddleware (intercepta todas las mutaciones)
 │       ├── models.py               # AuditLog (JSONB, FK PROTECT, UUID PK)
-│       ├── admin.py
-│       └── migrations/
+│       └── admin.py
 │
-└── frontend/                       # Frontend White-Label (servicio separado)
+└── frontend/                       # Servicio separado (ver repositorio enlazado)
     └── Dockerfile
 ```
 
 ---
 
-## 4. Referencia de la API
+## Prerrequisitos
 
-Todos los endpoints tienen el prefijo `/api/`. El estado de autenticación se gestiona a través de cookies de sesión — el cliente debe primero obtener un token CSRF a través del flujo de inicio de sesión.
+| Herramienta | Versión | Propósito |
+|---|---|---|
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) | ≥ 24.x | Runtime de contenedores con Compose v2 |
+| [Git](https://git-scm.com/) | ≥ 2.x | Control de versiones |
 
-### Autenticación
-
-| Método | Endpoint | Auth Requerida | Descripción |
-|---|---|---|---|
-| `POST` | `/api/users/login/` | No | Inicia sesión, establece cookies `sessionid` + `csrftoken` |
-| `GET` | `/api/users/me/` | Sí | Devuelve el perfil del usuario autenticado |
-| `POST` | `/api/users/logout/` | Sí | Destruye la sesión del lado del servidor |
-
-### Inventario de Usuarios
-
-| Método | Endpoint | Auth Requerida | Descripción |
-|---|---|---|---|
-| `GET` | `/api/users/inventory/` | Sí | Lista todos los usuarios |
-| `POST` | `/api/users/inventory/` | Sí | Crea un nuevo usuario |
-| `GET` | `/api/users/inventory/{uuid}/` | Sí | Recupera un usuario específico |
-| `PUT` | `/api/users/inventory/{uuid}/` | Sí | Actualización completa de un usuario |
-| `PATCH` | `/api/users/inventory/{uuid}/` | Sí | Actualización parcial de un usuario |
-| `DELETE` | `/api/users/inventory/{uuid}/` | Sí | Elimina un usuario |
-| `POST` | `/api/users/inventory/{uuid}/assign-roles/` | Sí | **RPC** — Sobreescribe el conjunto de roles del usuario |
-
-### Gestión de Roles (RBAC)
-
-| Método | Endpoint | Auth Requerida | Descripción |
-|---|---|---|---|
-| `GET` | `/api/rbac/roles/` | Sí | Lista todos los roles |
-| `POST` | `/api/rbac/roles/` | Sí | Crea un nuevo rol |
-| `GET` | `/api/rbac/roles/{id}/` | Sí | Recupera un rol específico |
-| `PUT` | `/api/rbac/roles/{id}/` | Sí | Actualiza un rol |
-| `DELETE` | `/api/rbac/roles/{id}/` | Sí | Elimina un rol |
-
-**`POST /api/users/inventory/{uuid}/assign-roles/` — Cuerpo de la Solicitud:**
-```json
-{
-  "role_ids": [1, 3]
-}
-```
+No se requiere instalación local de Python, PostgreSQL ni Redis. Todo corre dentro de Docker.
 
 ---
 
-## 5. Instalación y Despliegue Local
+## Instalación y Despliegue Local
 
-### Prerrequisitos
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (con Compose v2)
-- [Git](https://git-scm.com/)
-
-### Paso 1 — Clonar el repositorio
+### 1. Clonar el repositorio
 
 ```bash
 git clone https://github.com/CrisLottz/CoreAsset-RBAC-Inventory-Engine.git
 cd CoreAsset-RBAC-Inventory-Engine
 ```
 
-### Paso 2 — Construir e iniciar todos los servicios
+### 2. Construir e iniciar todos los servicios
 
 ```bash
 docker compose up --build
 ```
 
-> En el primer arranque, Docker construirá la imagen del backend `python:3.11-slim` e instalará todas las dependencias gestionadas por Poetry. Esto tarda ~60–90 segundos. Los arranques posteriores son casi instantáneos.
+> La primera construcción tarda ~60–90s (imagen Python + instalación de dependencias con Poetry). Los arranques posteriores son casi instantáneos.
 
-### Paso 3 — Aplicar las migraciones de base de datos
+### 3. Aplicar las migraciones de base de datos
 
-En una segunda terminal, mientras los contenedores están en ejecución:
+Abrir una segunda terminal:
 
 ```bash
 docker compose exec backend python manage.py migrate
 ```
 
-Esto aplica todos los cambios DDL definidos en los directorios `migrations/` de `users`, `rbac` y `audit`, creando las tablas necesarias en PostgreSQL.
-
-### Paso 4 — Crear un superusuario
+### 4. Crear un superusuario
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-Sigue el prompt interactivo para establecer `username`, `email` y `password`. Esta cuenta tiene acceso irrestricto al panel de administración de Django (`http://127.0.0.1:8000/admin/`) y a todos los endpoints de la API.
-
-### Paso 5 — Verificar el stack
+### 5. Verificar el stack
 
 | Servicio | URL |
 |---|---|
-| Raíz de la API | `http://127.0.0.1:8000/api/` |
-| Django Admin | `http://127.0.0.1:8000/admin/` |
-| Frontend (dev) | `http://127.0.0.1:5173/` |
+| Swagger UI (Docs API) | [http://127.0.0.1:8000/api/v1/docs/](http://127.0.0.1:8000/api/v1/docs/) |
+| Esquema OpenAPI (YAML) | [http://127.0.0.1:8000/api/v1/schema/](http://127.0.0.1:8000/api/v1/schema/) |
+| Django Admin | [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/) |
+| Frontend (dev) | [http://127.0.0.1:5173/](http://127.0.0.1:5173/) |
 
-Para detener todos los servicios limpiamente:
-
-```bash
-docker compose down
-```
-
-Para detener y **destruir el volumen de la base de datos** (reseteo completo):
+### Apagado
 
 ```bash
-docker compose down -v
+docker compose down       # Detener servicios, preservar datos
+docker compose down -v    # Detener servicios + destruir volumen de BD (reseteo completo)
 ```
 
 ---
 
-## 6. Estándares de Producción
+## Documentación de la API
 
-### Migraciones de Esquema (DDL como Código)
+Este proyecto usa [**drf-spectacular**](https://drf-spectacular.readthedocs.io/) para auto-generar un esquema OpenAPI 3.0 desde el código de DRF. La interfaz interactiva Swagger UI se sirve en:
 
-Todos los cambios de esquema de base de datos se ejecutan **exclusivamente a través de migraciones de Django**. Ningún DDL se aplica manualmente a la base de datos. Esto garantiza que el historial del esquema esté versionado, sea reproducible entre entornos y reversible.
+```
+http://127.0.0.1:8000/api/v1/docs/
+```
 
-> ⚠️ Nunca ejecutes comandos `ALTER TABLE` o `CREATE TABLE` directamente contra la base de datos de producción. Genera una migración con `python manage.py makemigrations` y aplícala con `python manage.py migrate`.
+El esquema OpenAPI sin procesar (JSON/YAML) está disponible en:
 
-### Seguridad de Red
+```
+http://127.0.0.1:8000/api/v1/schema/
+```
 
-- Todos los puertos de servicios Docker están vinculados a `127.0.0.1` (loopback) en la configuración de Compose. En un despliegue de producción detrás de un proxy inverso (ej. Nginx, Caddy), solo los puertos `80`/`443` deben estar expuestos externamente. Los puertos de la base de datos y Redis nunca deben ser públicamente accesibles.
-- La `SECRET_KEY` debe ser rotada e inyectada a través de variables de entorno (ej. Docker secrets, AWS Secrets Manager) — nunca codificada directamente en `settings.py`.
-- `DEBUG = False` debe ser aplicado en todos los entornos de producción. Establece `ALLOWED_HOSTS` al dominio de producción exacto.
-- `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS` deben ser restringidos únicamente al dominio del frontend de producción.
+Ambos endpoints están activos cuando el contenedor del backend está corriendo. Las rutas de admin están excluidas del esquema público.
 
-### Integridad de Dependencias
+---
 
-El archivo `poetry.lock` fija cada paquete y sus dependencias transitivas a una versión exacta y hash. Confirma este archivo en el control de versiones. En los pipelines de CI/CD, usa `poetry install --no-root` para garantizar construcciones reproducibles sin actualizaciones implícitas.
+## Referencia de la API
+
+Todos los endpoints están versionados bajo `/api/v1/`. La autenticación se gestiona via cookies de sesión — el cliente debe primero llamar al endpoint de login para establecer una sesión.
+
+### Autenticación
+
+| Método | Endpoint | Auth | Descripción |
+|---|---|---|---|
+| `POST` | `/api/v1/users/login/` | ✗ | Autenticar y recibir cookies `sessionid` + `csrftoken` |
+| `GET` | `/api/v1/users/me/` | ✓ | Retornar el perfil del usuario autenticado |
+| `POST` | `/api/v1/users/logout/` | ✓ | Destruir la sesión del lado del servidor |
+
+### Gestión de Usuarios
+
+| Método | Endpoint | Auth | Descripción |
+|---|---|---|---|
+| `GET` | `/api/v1/users/inventory/` | ✓ | Listar todos los usuarios |
+| `POST` | `/api/v1/users/inventory/` | ✓ | Crear un usuario |
+| `GET` | `/api/v1/users/inventory/{uuid}/` | ✓ | Recuperar un usuario |
+| `PUT/PATCH` | `/api/v1/users/inventory/{uuid}/` | ✓ | Actualizar un usuario |
+| `DELETE` | `/api/v1/users/inventory/{uuid}/` | ✓ | Eliminar un usuario |
+| `POST` | `/api/v1/users/inventory/{uuid}/assign-roles/` | ✓ | **RPC** — Sobreescribir el conjunto de roles del usuario |
+
+### Roles (RBAC)
+
+| Método | Endpoint | Auth | Descripción |
+|---|---|---|---|
+| `GET` | `/api/v1/rbac/roles/` | ✓ | Listar todos los roles |
+| `POST` | `/api/v1/rbac/roles/` | ✓ | Crear un rol |
+| `GET` | `/api/v1/rbac/roles/{id}/` | ✓ | Recuperar un rol |
+| `PUT/PATCH` | `/api/v1/rbac/roles/{id}/` | ✓ | Actualizar un rol |
+| `DELETE` | `/api/v1/rbac/roles/{id}/` | ✓ | Eliminar un rol |
+
+### Inventario de Activos
+
+| Método | Endpoint | Auth | Descripción |
+|---|---|---|---|
+| `GET` | `/api/v1/assets/inventory/` | ✓ | Listar activos (filtrado por alcance geográfico del usuario) |
+| `POST` | `/api/v1/assets/inventory/` | ✓ | Crear un activo (restringido por sede) |
+| `GET` | `/api/v1/assets/inventory/{uuid}/` | ✓ | Recuperar un activo |
+| `PUT/PATCH` | `/api/v1/assets/inventory/{uuid}/` | ✓ | Actualizar un activo (restringido por sede) |
+| `DELETE` | `/api/v1/assets/inventory/{uuid}/` | ✓ | Eliminar un activo (restringido por sede) |
+
+**Parámetros de consulta**: `?location_id={uuid}` — Filtrar activos por una sede específica.
+
+### Sedes (Locations)
+
+| Método | Endpoint | Auth | Descripción |
+|---|---|---|---|
+| `GET` | `/api/v1/assets/locations/` | ✓ | Listar todas las sedes |
+| `POST` | `/api/v1/assets/locations/` | ✓ | Crear una sede |
+| `GET` | `/api/v1/assets/locations/{uuid}/` | ✓ | Recuperar una sede |
+| `PUT/PATCH` | `/api/v1/assets/locations/{uuid}/` | ✓ | Actualizar una sede |
+| `DELETE` | `/api/v1/assets/locations/{uuid}/` | ✓ | Eliminar una sede |
+
+---
+
+## Lista de Verificación para Producción
+
+| Área | Requisito |
+|---|---|
+| **Clave Secreta** | Rotar `SECRET_KEY` vía variable de entorno (Docker secrets, AWS SSM). Nunca codificar en duro. |
+| **Modo Debug** | Establecer `DEBUG = False`. Configurar `ALLOWED_HOSTS` al dominio de producción. |
+| **CORS / CSRF** | Acotar `CORS_ALLOWED_ORIGINS` y `CSRF_TRUSTED_ORIGINS` únicamente al dominio del frontend de producción. |
+| **Contraseña Redis** | Reemplazar la contraseña de desarrollo con un secreto fuerte y rotado vía variable de entorno. |
+| **Red** | Todos los puertos Docker ya están vinculados a `127.0.0.1`. En producción, colocar detrás de un proxy inverso (Nginx/Caddy) exponiendo solo `443`. |
+| **Migraciones** | Todo DDL se ejecuta exclusivamente vía `python manage.py migrate`. Nunca ejecutar `ALTER TABLE` directo contra producción. |
+| **Dependencias** | `poetry.lock` fija cada dependencia transitiva. Usar `poetry install --no-root` en CI/CD para builds reproducibles. |
