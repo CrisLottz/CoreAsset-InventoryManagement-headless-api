@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -93,6 +94,24 @@ DATABASES = {
         'PORT': '5432',
     }
 }
+
+# ==========================================
+# CONFIGURACIÓN DE REDIS (CACHÉ EN MEMORIA)
+# ==========================================
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "SERIALIZER": "django_redis.serializers.pickle.PickleSerializer",
+        }
+    }
+}
+
+# Tiempo de vida por defecto para la caché (15 minutos)
+CACHE_TTL = 60 * 15 
 
 
 # Password validation
