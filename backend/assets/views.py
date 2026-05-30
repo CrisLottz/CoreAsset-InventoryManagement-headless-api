@@ -25,12 +25,12 @@ class AssetViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = Asset.objects.select_related('location', 'assigned_to').all().order_by('-created_at')
 
-        # 1. Filtro de alcance (Scope): Si no es admin y NO tiene el permiso global, 
-        # bloqueamos el queryset exclusivamente a las sedes que tiene asignadas.
+
+
         if not user.is_superuser and not user.has_perm('assets.view_global_inventory'):
             queryset = queryset.filter(location__in=user.assigned_locations.all())
 
-        # 2. Filtros dinámicos por URL (Ej. ?location_id=uuid)
+
         location_id = self.request.query_params.get('location_id')
         if location_id:
             queryset = queryset.filter(location_id=location_id)
@@ -39,7 +39,7 @@ class AssetViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         """
-        Intercepta la petición GET. Sirve desde Redis si existe, 
+        Intercepta la petición GET. Sirve desde Redis si existe,
         de lo contrario consulta a PostgreSQL y guarda el resultado.
         """
         location_id = request.query_params.get('location_id', 'all')
@@ -51,7 +51,7 @@ class AssetViewSet(viewsets.ModelViewSet):
 
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
-        
+
         if page is not None:
             serializer = self.get_serializer(page, many=True)
             response_data = self.get_paginated_response(serializer.data).data
@@ -59,9 +59,9 @@ class AssetViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(queryset, many=True)
             response_data = serializer.data
 
-        # Guardar en Redis
+
         cache.set(cache_key, response_data, timeout=getattr(settings, 'CACHE_TTL', 900))
-        
+
         return Response(response_data)
 
     def _invalidate_user_cache(self):
@@ -74,11 +74,11 @@ class AssetViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user = self.request.user
         location = serializer.validated_data['location']
-        
+
         if not user.is_superuser and not user.has_perm('assets.manage_global_inventory'):
             if not user.assigned_locations.filter(id=location.id).exists():
                 raise PermissionDenied("El Rol actual no autoriza la creación de activos en esta sede.")
-                
+
         serializer.save()
         self._invalidate_user_cache()
 

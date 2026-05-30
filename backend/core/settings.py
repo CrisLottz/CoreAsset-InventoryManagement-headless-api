@@ -13,23 +13,23 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
+
+
+
 SECRET_KEY = 'django-insecure-bozd=kt2q^$jz#c2fys#v!kh*1+nt8gbly3z)ye4&b=z_$annv'
 
-# SECURITY WARNING: don't run with debug turned on in production!
+
 DEBUG = True
 
 ALLOWED_HOSTS = []
 
 
-# Application definition
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -52,13 +52,13 @@ AUTH_USER_MODEL = 'users.User'
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # Middleware de CORS
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'audit.middleware.AuditMiddleware', # Nuestro middleware de auditoría personalizado
+    'audit.middleware.AuditMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
@@ -81,8 +81,8 @@ TEMPLATES = [
 WSGI_APPLICATION = 'core.wsgi.application'
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+
+
 
 DATABASES = {
     'default': {
@@ -95,9 +95,9 @@ DATABASES = {
     }
 }
 
-# ==========================================
-# CONFIGURACIÓN DE REDIS (CACHÉ EN MEMORIA)
-# ==========================================
+
+
+
 
 CACHES = {
     "default": {
@@ -110,12 +110,12 @@ CACHES = {
     }
 }
 
-# Tiempo de vida por defecto para la caché (15 minutos)
-CACHE_TTL = 60 * 15 
+
+CACHE_TTL = 60 * 15
 
 
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -133,8 +133,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
+
+
 
 LANGUAGE_CODE = 'en-us'
 
@@ -145,22 +145,22 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.2/howto/static-files/
+
+
 
 STATIC_URL = 'static/'
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
+
+
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# ==========================================
-# CONFIGURACIÓN DE API Y SEGURIDAD (DRF / CORS / CSRF)
-# ==========================================
 
-# Forzamos a DRF a usar Cookies (Session) en lugar de Tokens básicos
+
+
+
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
@@ -168,20 +168,20 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    # Motor de autogeneración de esquema (Swagger)
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema', 
+
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# Autorizamos a React (que correrá en localhost:5173) a interactuar con la API
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
 
-# CRÍTICO: Permitimos que las peticiones crucen enviando las Cookies de sesión
+
 CORS_ALLOW_CREDENTIALS = True
 
-# Le decimos a la protección CSRF de Django que confíe en React
+
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -192,6 +192,6 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Headless API para gestión de activos, auditoría y control de acceso.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    # Oculta endpoints nativos o rutas que no queremos exponer al cliente final
-    'EXCLUDE_PATHS': ['/admin/'], 
+
+    'EXCLUDE_PATHS': ['/admin/'],
 }

@@ -7,7 +7,7 @@ class Role(Group):
     a la semántica de negocio 'Role' (RBAC).
     No crea una tabla nueva en PostgreSQL (usa auth_group).
     """
-    
+
     class Meta:
         proxy = True
         app_label = 'rbac'

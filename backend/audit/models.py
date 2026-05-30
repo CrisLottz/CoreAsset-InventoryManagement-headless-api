@@ -4,21 +4,21 @@ from django.conf import settings
 
 class AuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Integridad referencial estricta: si un usuario se elimina, sus logs permanecen inmutables
+
+
     actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.PROTECT, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
         related_name='audit_logs'
     )
-    
-    action = models.CharField(max_length=50)         # Ej: 'CREATE', 'UPDATE', 'DELETE'
-    entity_type = models.CharField(max_length=100)    # Ej: 'User', 'Asset', 'License'
+
+    action = models.CharField(max_length=50)
+    entity_type = models.CharField(max_length=100)
     entity_id = models.UUIDField()
-    
-    # Campo JSONB nativo de PostgreSQL para almacenar estructuras de datos variables
+
+
     metadata_json = models.JSONField(default=dict)
-    
+
     ip_address = models.GenericIPAddressField()
     created_at = models.DateTimeField(auto_now_add=True)
 

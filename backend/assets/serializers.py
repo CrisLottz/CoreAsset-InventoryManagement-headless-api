@@ -2,7 +2,7 @@ import jsonschema
 from rest_framework import serializers
 from .models import Location, Asset
 
-# 1. EL CONTRATO (JSON Schema Estándar)
+
 ASSET_METADATA_SCHEMA = {
     "type": "object",
     "required": ["type"],
@@ -13,10 +13,10 @@ ASSET_METADATA_SCHEMA = {
         {
             "if": {"properties": {"type": {"const": "laptop"}}},
             "then": {
-                # Quitamos "mac_address" y "cpu" de la lista de requeridos.
-                # Ahora, el usuario puede enviar un JSON solo con {"type": "laptop"} y pasará.
+
+
                 "properties": {
-                    # Si envían la MAC, jsonschema aún verificará que el formato sea correcto.
+
                     "mac_address": {"type": "string", "pattern": "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"},
                     "cpu": {"type": "string"}
                 }
@@ -25,7 +25,7 @@ ASSET_METADATA_SCHEMA = {
         {
             "if": {"properties": {"type": {"const": "license"}}},
             "then": {
-                # Mantenemos 'tenant' como obligatorio para licencias porque sin él, el activo es inútil.
+
                 "required": ["tenant"],
                 "properties": {
                     "tenant": {"type": "string"}
@@ -58,13 +58,13 @@ class AssetSerializer(serializers.ModelSerializer):
         Delega toda la complejidad condicional al motor de jsonschema.
         """
         try:
-            # Si el JSON no cumple el contrato, lanza una excepción inmediatamente
+
             jsonschema.validate(instance=value, schema=ASSET_METADATA_SCHEMA)
         except jsonschema.exceptions.ValidationError as e:
-            # Traducimos el error de jsonschema al formato legible de DRF
+
             raise serializers.ValidationError({
                 "schema_error": e.message,
-                "path": list(e.path) # Indica exactamente en qué nodo del JSON falló
+                "path": list(e.path)
             })
-            
+
         return value
