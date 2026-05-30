@@ -18,7 +18,6 @@ services:
     image: redis:7-alpine
     container_name: coreasset_redis
     restart: unless-stopped
-    # 1. Forzamos a Redis a exigir contraseña al arrancar
     command: redis-server --requirepass "T3mpP@ssw0rd2026!"
     ports:
       - "127.0.0.1:6379:6379"
@@ -35,25 +34,10 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      # 2. Inyectamos la contraseña en la URI de conexión (redis://:password@host:port/db)
       - REDIS_URL=redis://:T3mpP@ssw0rd2026!@redis:6379/0
     depends_on:
       - db
       - redis
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: coreasset_frontend
-    restart: unless-stopped
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    ports:
-      - "127.0.0.1:5173:5173"
-    environment:
-      - CHOKIDAR_USEPOLLING=true
 
 volumes:
   postgres_data:
