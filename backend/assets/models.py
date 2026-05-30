@@ -20,12 +20,12 @@ class Asset(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    internal_tag = models.CharField(max_length=50, unique=True) 
+    internal_tag = models.CharField(max_length=50, unique=True)
     location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name='assets')
     assigned_to = models.ForeignKey(
-        settings.AUTH_USER_MODEL, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
         related_name='assigned_assets'
     )
@@ -40,7 +40,7 @@ class Asset(models.Model):
             models.Index(fields=['internal_tag']),
             GinIndex(fields=['metadata_json']),
         ]
-        # NUEVO: Generación de checkboxes personalizadas para los Roles
+
         permissions = [
             ("view_global_inventory", "Puede ver activos de TODAS las sedes"),
             ("manage_global_inventory", "Puede editar/borrar activos de TODAS las sedes"),

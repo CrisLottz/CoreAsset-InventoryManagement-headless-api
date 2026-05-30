@@ -14,28 +14,28 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework import status
 from rbac.models import Role
-from .serializers import AssignRoleSerializer # Importamos el nuevo serializador
+from .serializers import AssignRoleSerializer
 
 User = get_user_model()
 
 
-# Decorador vital: Garantiza que, pase lo que pase, Django envíe la cookie CSRF al frontend
+
 @method_decorator(ensure_csrf_cookie, name='dispatch')
 class LoginView(APIView):
-    # Cualquiera puede intentar iniciar sesión, no pedimos token previo
+
     permission_classes = [AllowAny]
 
     def post(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
 
-        # 1. authenticate() verifica el hash Argon2/PBKDF2 en la base de datos
+
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
-            # 2. login() es la función mágica que genera la Cookie de Sesión (sessionid)
+
             login(request, user)
-            
+
             return Response({
                 "detail": "Autenticación exitosa",
                 "user": {
@@ -46,43 +46,43 @@ class LoginView(APIView):
                 }
             }, status=status.HTTP_200_OK)
         else:
-            # 401 Unauthorized: El estándar REST para credenciales inválidas
+
             return Response(
-                {"detail": "Credenciales inválidas"}, 
+                {"detail": "Credenciales inválidas"},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
 
 class UserMeView(APIView):
-    # CRÍTICO: Este endpoint exige que la cookie de sesión sea válida
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # Como pasó el filtro de IsAuthenticated, 'request.user' ya contiene 
-        # el objeto del usuario real consultado desde PostgreSQL.
+
+
         user = request.user
-        
+
         return Response({
             "id": user.id,
             "username": user.username,
             "email": user.email,
             "is_staff": user.is_staff,
-            "is_mfa_enabled": user.is_mfa_enabled # Incluimos el campo específico de tu diagrama
+            "is_mfa_enabled": user.is_mfa_enabled
         }, status=status.HTTP_200_OK)
 
 class LogoutView(APIView):
-    # Solo alguien con sesión iniciada puede cerrarla
+
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # La función nativa logout() limpia los datos de la sesión y destruye la cookie
+
         logout(request)
-        
+
         return Response(
-            {"detail": "Sesión cerrada exitosamente."}, 
+            {"detail": "Sesión cerrada exitosamente."},
             status=status.HTTP_200_OK
         )
-    
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
@@ -93,35 +93,35 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         Sobrescribe los roles actuales del usuario con la lista proporcionada.
         """
-        # 1. Recuperamos el usuario específico de la URL
-        user = self.get_object() 
-        
-        # 2. Pasamos el JSON entrante por nuestro validador estricto
+
+        user = self.get_object()
+
+
         serializer = AssignRoleSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             role_ids = serializer.validated_data['role_ids']
-            
-            # 3. Obtenemos las instancias reales de los roles
+
+
             roles = Role.objects.filter(id__in=role_ids)
-            
-            # 4. Asignamos los roles. 
-            # Nota Arquitectónica: Usamos user.groups.set() porque, internamente, 
-            # nuestro Role es un proxy del modelo Group de Django.
+
+
+
+
             user.groups.set(roles)
-            
+
             return Response(
                 {"detail": "Privilegios actualizados con éxito.", "assigned_roles": role_ids},
                 status=status.HTTP_200_OK
             )
-            
-        # Si envían basura (ej. letras en lugar de números), el serializador bloquea y retorna 400
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
-    
+
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     def get_serializer_class(self):
         """
         Sobrescribe el serializador por defecto dependiendo de la acción.
-        Garantiza que la interfaz web y la documentación OpenAPI 
+        Garantiza que la interfaz web y la documentación OpenAPI
         muestren los campos correctos.
         """
         if self.action == 'assign_roles':
