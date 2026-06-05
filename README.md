@@ -397,7 +397,26 @@ git clone https://github.com/CrisLottz/CoreAsset-RBAC-Inventory-Engine.git
 cd CoreAsset-RBAC-Inventory-Engine
 ```
 
-### 2. Build and start all services
+### 2. Configure Environment Variables
+
+Create your local environment file from the provided template. This step is **strictly required** to authorize your custom frontend's domain via CORS.
+
+```bash
+cp .env.example .env
+```
+
+*Open `.env` and edit `CORS_ALLOWED_ORIGINS` to match your frontend's port or domain (e.g., `http://localhost:4321`).*
+
+### 3. Configure Environment Variables
+
+Create your local environment file from the provided template. This step is **strictly required** to authorize your custom frontend's domain via CORS.
+
+```bash
+cp .env.example .env
+```
+Open .env and edit CORS_ALLOWED_ORIGINS to match your frontend's port or domain (e.g., http://localhost:4321).
+
+### 4. Build and start all services
 
 ```bash
 docker compose up --build
@@ -405,7 +424,7 @@ docker compose up --build
 
 > First build takes ~60–90s (Python image + Poetry dependency install). Subsequent starts are near-instant.
 
-### 3. Apply database migrations
+### 5. Apply database migrations
 
 Open a second terminal:
 
@@ -413,13 +432,13 @@ Open a second terminal:
 docker compose exec backend python manage.py migrate
 ```
 
-### 4. Create a superuser
+### 6. Create a superuser
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 5. Verify the stack
+### 7. Verify the stack
 
 | Service | URL |
 |---|---|
