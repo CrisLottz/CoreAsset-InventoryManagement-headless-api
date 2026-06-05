@@ -407,16 +407,7 @@ cp .env.example .env
 
 *Open `.env` and edit `CORS_ALLOWED_ORIGINS` to match your frontend's port or domain (e.g., `http://localhost:4321`).*
 
-### 3. Configure Environment Variables
-
-Create your local environment file from the provided template. This step is **strictly required** to authorize your custom frontend's domain via CORS.
-
-```bash
-cp .env.example .env
-```
-Open .env and edit CORS_ALLOWED_ORIGINS to match your frontend's port or domain (e.g., http://localhost:4321).
-
-### 4. Build and start all services
+### 3. Build and start all services
 
 ```bash
 docker compose up --build
@@ -424,7 +415,7 @@ docker compose up --build
 
 > First build takes ~60–90s (Python image + Poetry dependency install). Subsequent starts are near-instant.
 
-### 5. Apply database migrations
+### 4. Apply database migrations
 
 Open a second terminal:
 
@@ -432,13 +423,13 @@ Open a second terminal:
 docker compose exec backend python manage.py migrate
 ```
 
-### 6. Create a superuser
+### 5. Create a superuser
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 7. Verify the stack
+### 6. Verify the stack
 
 | Service | URL |
 |---|---|
@@ -946,8 +937,17 @@ No se requiere instalación local de Python, PostgreSQL ni Redis. Todo corre den
 git clone https://github.com/CrisLottz/CoreAsset-RBAC-Inventory-Engine.git
 cd CoreAsset-RBAC-Inventory-Engine
 ```
+### 2. Configurar Variables de Entorno
 
-### 2. Construir e iniciar todos los servicios
+Crea tu archivo de entorno local a partir de la plantilla provista. Este paso es **estrictamente obligatorio** para autorizar el dominio de tu frontend personalizado mediante CORS.
+
+```bash
+cp .env.example .env
+```
+
+*Abre el archivo `.env` y edita `CORS_ALLOWED_ORIGINS` para que coincida con el puerto o dominio de tu frontend (ej. `http://localhost:4321`).*
+
+### 3. Construir e iniciar todos los servicios
 
 ```bash
 docker compose up --build
@@ -955,7 +955,7 @@ docker compose up --build
 
 > La primera construcción tarda ~60–90s (imagen Python + instalación de dependencias con Poetry). Los arranques posteriores son casi instantáneos.
 
-### 3. Aplicar las migraciones de base de datos
+### 4. Aplicar las migraciones de base de datos
 
 Abrir una segunda terminal:
 
@@ -963,13 +963,13 @@ Abrir una segunda terminal:
 docker compose exec backend python manage.py migrate
 ```
 
-### 4. Crear un superusuario
+### 5. Crear un superusuario
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 5. Verificar el stack
+### 6. Verificar el stack
 
 | Servicio | URL |
 |---|---|
