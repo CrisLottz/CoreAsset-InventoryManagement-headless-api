@@ -21,7 +21,8 @@ services:
     command: redis-server --requirepass "T3mpP@ssw0rd2026!"
     ports:
       - "127.0.0.1:6379:6379"
-backend:
+
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
