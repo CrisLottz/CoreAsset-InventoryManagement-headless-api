@@ -1,13 +1,27 @@
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
+
+def get_env_variable(var_name, default=None):
+    """Obtiene la variable de entorno o falla de forma ruidosa si no existe (Fail-Fast)"""
+    try:
+        return os.environ[var_name]
+    except KeyError:
+        if default is not None:
+            return default
+        raise ImproperlyConfigured(f"Falla de seguridad: La variable de entorno {var_name} no está definida.")
+
+def parse_env_list(var_name, default_val):
+    raw_val = os.environ.get(var_name, default_val)
+    return [item.strip() for item in raw_val.split(',') if item.strip()]
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-bozd=kt2q^$jz#c2fys#v!kh*1+nt8gbly3z)ye4&b=z_$annv'
+# SEGURIDAD CORE
+SECRET_KEY = get_env_variable('SECRET_KEY')
+DEBUG = get_env_variable('DEBUG', 'False') == 'True'
 
-DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = parse_env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -58,21 +72,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
+# BASE DE DATOS BLINDADA
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'coreasset',
-        'USER': 'postgres',
-        'PASSWORD': 'postgres',
-        'HOST': 'db',
-        'PORT': '5432',
+        'NAME': get_env_variable('POSTGRES_DB', 'coreasset'),
+        'USER': get_env_variable('POSTGRES_USER', 'postgres'),
+        'PASSWORD': get_env_variable('POSTGRES_PASSWORD', 'postgres'),
+        'HOST': get_env_variable('POSTGRES_HOST', 'db'),
+        'PORT': get_env_variable('POSTGRES_PORT', '5432'),
     }
 }
 
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0"),
+        "LOCATION": get_env_variable("REDIS_URL", "redis://127.0.0.1:6379/0"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "SERIALIZER": "django_redis.serializers.pickle.PickleSerializer",
@@ -119,17 +134,10 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-env_cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
-
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() 
-    for origin in env_cors_origins.split(',') 
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = parse_env_list('CORS_ALLOWED_ORIGINS', 'http://localhost:4321')
+CSRF_TRUSTED_ORIGINS = parse_env_list('CSRF_TRUSTED_ORIGINS', 'http://localhost:4321')
 
 CORS_ALLOW_CREDENTIALS = True
-
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'CoreAsset Inventory & IAM Engine',

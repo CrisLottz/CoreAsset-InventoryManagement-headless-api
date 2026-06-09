@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.contrib.postgres.indexes import GinIndex
+from django.utils.translation import gettext_lazy as _
 import uuid
 
 class Location(models.Model):
@@ -14,9 +15,9 @@ class Location(models.Model):
 
 class Asset(models.Model):
     STATUS_CHOICES = [
-        ('ACTIVE', 'Operativo'),
-        ('MAINTENANCE', 'En Mantenimiento'),
-        ('RETIRED', 'De Baja / Descartado'),
+        ('ACTIVE', _('Operativo')),
+        ('MAINTENANCE', _('En Mantenimiento')),
+        ('RETIRED', _('De Baja / Descartado')),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -7,6 +7,8 @@ from django.conf import settings
 from .models import Location, Asset
 from .serializers import LocationSerializer, AssetSerializer
 from .permissions import IsLocationManagerStrict
+from rest_framework.views import APIView
+from django.utils.translation import gettext as _
 
 class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.all().order_by('name')
@@ -23,13 +25,11 @@ class AssetViewSet(viewsets.ModelViewSet):
         Filtra los resultados basándose en la matriz de permisos del Rol.
         """
         user = self.request.user
+        # JOIN optimizado en PostgreSQL para evitar problemas N+1
         queryset = Asset.objects.select_related('location', 'assigned_to').all().order_by('-created_at')
-
-
 
         if not user.is_superuser and not user.has_perm('assets.view_global_inventory'):
             queryset = queryset.filter(location__in=user.assigned_locations.all())
-
 
         location_id = self.request.query_params.get('location_id')
         if location_id:
@@ -58,7 +58,6 @@ class AssetViewSet(viewsets.ModelViewSet):
         else:
             serializer = self.get_serializer(queryset, many=True)
             response_data = serializer.data
-
 
         cache.set(cache_key, response_data, timeout=getattr(settings, 'CACHE_TTL', 900))
 
@@ -89,3 +88,31 @@ class AssetViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance.delete()
         self._invalidate_user_cache()
+
+
+class AssetMetadataView(APIView):
+    """
+    Endpoint White-Label que expone los diccionarios de datos al frontend.
+    Preparado para i18n: Las etiquetas se resuelven en string para forzar
+    la traducción según el request del usuario.
+    """
+    # Usamos DjangoModelPermissions si quieres restringirlo, 
+    # pero la metadata suele ser pública para usuarios logueados.
+    permission_classes = [DjangoModelPermissions]
+    queryset = Asset.objects.none() # Necesario para que DjangoModelPermissions no falle
+
+    def get(self, request, *args, **kwargs):
+        # 1. Extraemos los estados directamente del modelo
+        status_choices = [{"value": k, "label": str(v)} for k, v in Asset.STATUS_CHOICES]
+
+        # 2. Definimos los tipos de activos basados en tu JSONSchema
+        type_choices = [
+            {"value": "laptop", "label": str(_("Laptop / Equipo"))},
+            {"value": "mobile", "label": str(_("Dispositivo Móvil"))},
+            {"value": "license", "label": str(_("Licencia de Software"))},
+        ]
+
+        return Response({
+            "statuses": status_choices,
+            "asset_types": type_choices
+        })
