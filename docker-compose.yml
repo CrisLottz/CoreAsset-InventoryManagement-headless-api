@@ -33,11 +33,9 @@ services:
       - ./backend:/app
     ports:
       - "127.0.0.1:8000:8000"
-    environment:
-      - REDIS_URL=redis://:T3mpP@ssw0rd2026!@redis:6379/0
-      # Interpolación: Lee la variable del archivo .env local. 
-      # El ":-http://localhost:5173" es un fallback (valor por defecto) por si el usuario olvida crear el .env
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    # Diseño serio: Inyección directa a memoria del SO
+    env_file:
+      - .env
     depends_on:
       - db
       - redis
