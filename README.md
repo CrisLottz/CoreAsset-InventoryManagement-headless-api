@@ -211,7 +211,7 @@ ASSET_METADATA_SCHEMA = {
 }
 ```
 
-**Design trade-off**: Technical fields like `mac_address` and `cpu` are validated **if present** but are not required. This prevents blocking logistics operators who register assets before technical details are available. However, the `tenant` field for licenses **is** required because a license without an owner is semantically useless.
+**Design trade-off**: Technical fields like `mac_address` and `cpu` are validated **if present** but are not a requirement. This prevents blocking logistics operators who register assets before technical details are available. However, the `tenant` field for licenses **is** required because a license without an owner is semantically useless.
 
 The validation fires at the serializer layer — before any database write:
 
