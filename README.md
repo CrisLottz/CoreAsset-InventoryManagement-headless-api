@@ -179,7 +179,7 @@ class Asset(models.Model):
 
 ---
 
-### 4. Declarative Validation — jsonschema
+### 4. Declarative Validation — jsonschema 
 
 > **Decision**: Protect the JSONB column with a `jsonschema` contract in the DRF serializer — not with imperative `if/else` chains in Python.
 
