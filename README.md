@@ -1,5 +1,5 @@
 <div align="center">
-
+ 
 # CoreAsset — Inventory Management Headless API
 
 **Multi-Tenant Backend Engine for Asset Tracking, Identity Governance & Automated Compliance**
