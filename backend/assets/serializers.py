@@ -68,7 +68,7 @@ class AssetSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError({"assigned_to": ["Employee assignment is required."]})
                     continue
 
-                # 2. VALIDADOR DE JSONB (Datos dinámicos)
+              
                 if 'dynamic_data' in data:
                     val = dynamic_data.get(field.name)
                     
