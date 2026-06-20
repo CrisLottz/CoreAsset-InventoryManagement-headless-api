@@ -4,29 +4,34 @@ from rest_framework.permissions import DjangoModelPermissions
 from rest_framework.exceptions import PermissionDenied
 from django.core.cache import cache
 from django.conf import settings
-from .models import Location, Asset
-from .serializers import LocationSerializer, AssetSerializer
+
+from .models import Location, AssetCategory, Asset
+from .serializers import LocationSerializer, AssetCategorySerializer, AssetSerializer
 from .permissions import IsLocationManagerStrict
-from rest_framework.views import APIView
-from django.utils.translation import gettext as _
 
 class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.all().order_by('name')
     serializer_class = LocationSerializer
     permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
 
+class CategoryStructureViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Endpoint White-Label. Despacha la configuración de módulos activa.
+    El frontend usa esto para saber qué inputs y columnas dibujar.
+    """
+    # prefetch_related optimiza la subconsulta SQL de los CategoryFields
+    queryset = AssetCategory.objects.prefetch_related('fields').filter(is_hidden=False).order_by('display_order')
+    serializer_class = AssetCategorySerializer
+    permission_classes = [DjangoModelPermissions]
 
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
     permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
 
     def get_queryset(self):
-        """
-        Filtra los resultados basándose en la matriz de permisos del Rol.
-        """
         user = self.request.user
-        # JOIN optimizado en PostgreSQL para evitar problemas N+1
-        queryset = Asset.objects.select_related('location', 'assigned_to').all().order_by('-created_at')
+        # JOIN optimizado con la nueva arquitectura
+        queryset = Asset.objects.select_related('location', 'category', 'assigned_to').all().order_by('-created_at')
 
         if not user.is_superuser and not user.has_perm('assets.view_global_inventory'):
             queryset = queryset.filter(location__in=user.assigned_locations.all())
@@ -38,10 +43,6 @@ class AssetViewSet(viewsets.ModelViewSet):
         return queryset
 
     def list(self, request, *args, **kwargs):
-        """
-        Intercepta la petición GET. Sirve desde Redis si existe,
-        de lo contrario consulta a PostgreSQL y guarda el resultado.
-        """
         location_id = request.query_params.get('location_id', 'all')
         cache_key = f"inventory_user_{request.user.id}_loc_{location_id}"
 
@@ -60,23 +61,20 @@ class AssetViewSet(viewsets.ModelViewSet):
             response_data = serializer.data
 
         cache.set(cache_key, response_data, timeout=getattr(settings, 'CACHE_TTL', 900))
-
         return Response(response_data)
 
     def _invalidate_user_cache(self):
-        """
-        Borra todas las llaves de Redis asociadas a este usuario.
-        """
         pattern = f"inventory_user_{self.request.user.id}_*"
         cache.delete_pattern(pattern)
 
     def perform_create(self, serializer):
         user = self.request.user
-        location = serializer.validated_data['location']
+        location = serializer.validated_data.get('location')
 
-        if not user.is_superuser and not user.has_perm('assets.manage_global_inventory'):
+        # Permitimos activos sin sede (ej. Licencias Virtuales)
+        if location and not user.is_superuser and not user.has_perm('assets.manage_global_inventory'):
             if not user.assigned_locations.filter(id=location.id).exists():
-                raise PermissionDenied("El Rol actual no autoriza la creación de activos en esta sede.")
+                raise PermissionDenied("Not authorized to create assets in this location.")
 
         serializer.save()
         self._invalidate_user_cache()
@@ -88,31 +86,3 @@ class AssetViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance.delete()
         self._invalidate_user_cache()
-
-
-class AssetMetadataView(APIView):
-    """
-    Endpoint White-Label que expone los diccionarios de datos al frontend.
-    Preparado para i18n: Las etiquetas se resuelven en string para forzar
-    la traducción según el request del usuario.
-    """
-    # Usamos DjangoModelPermissions si quieres restringirlo, 
-    # pero la metadata suele ser pública para usuarios logueados.
-    permission_classes = [DjangoModelPermissions]
-    queryset = Asset.objects.none() # Necesario para que DjangoModelPermissions no falle
-
-    def get(self, request, *args, **kwargs):
-        # 1. Extraemos los estados directamente del modelo
-        status_choices = [{"value": k, "label": str(v)} for k, v in Asset.STATUS_CHOICES]
-
-        # 2. Definimos los tipos de activos basados en tu JSONSchema
-        type_choices = [
-            {"value": "laptop", "label": str(_("Laptop / Equipo"))},
-            {"value": "mobile", "label": str(_("Dispositivo Móvil"))},
-            {"value": "license", "label": str(_("Licencia de Software"))},
-        ]
-
-        return Response({
-            "statuses": status_choices,
-            "asset_types": type_choices
-        })
