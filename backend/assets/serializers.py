@@ -45,46 +45,55 @@ class AssetSerializer(serializers.ModelSerializer):
         return None
 
     def validate(self, data):
-        """
-        Validación dinámica: Recupera el esquema de la base de datos
-        y audita el payload JSON entrante.
-        """
-        category = data.get('category') or (self.instance.category if self.instance else None)
+        category = data.get('category') or getattr(self.instance, 'category', None)
         dynamic_data = data.get('dynamic_data', {})
 
-        if category and dynamic_data:
+        if category:
             errors = {}
             cleaned_dynamic_data = {}
             category_fields = category.fields.all()
 
             for field in category_fields:
-                val = dynamic_data.get(field.name)
-
-                # 1. Validación de Obligatoriedad
-                if field.is_required and val in [None, '', []]:
-                    errors[field.name] = "This field is required."
+                
+                # 1. INTERCEPTOR DE LLAVES FORÁNEAS (ESTO ES LO QUE FALTABA)
+                if field.field_type == 'LOCATION':
+                    val = data.get('location') if 'location' in data else getattr(self.instance, 'location', None)
+                    if field.is_required and not val:
+                        raise serializers.ValidationError({"location": ["Location assignment is required."]})
+                    continue
+                    
+                if field.field_type == 'EMPLOYEE':
+                    val = data.get('assigned_to') if 'assigned_to' in data else getattr(self.instance, 'assigned_to', None)
+                    if field.is_required and not val:
+                        raise serializers.ValidationError({"assigned_to": ["Employee assignment is required."]})
                     continue
 
-                if val not in [None, '']:
-                    # 2. Validación de Tipo y Opciones
-                    if field.field_type == 'NUMBER':
-                        try:
-                            float(val)
-                        except ValueError:
-                            errors[field.name] = "Must be a valid number."
-                            
-                    elif field.field_type in ['DROPDOWN', 'COLOR_STATUS']:
-                        valid_values = [opt.get('value') for opt in field.options_metadata]
-                        if val not in valid_values:
-                            errors[field.name] = f"Invalid option. Allowed: {valid_values}"
+                # 2. VALIDADOR DE JSONB (Datos dinámicos)
+                if 'dynamic_data' in data:
+                    val = dynamic_data.get(field.name)
                     
-                    # 3. Purga de datos (Stripping): Solo guardamos lo que está definido
-                    cleaned_dynamic_data[field.name] = val
+                    if field.is_required and val in [None, '', []]:
+                        errors[field.name] = "This field is required."
+                        continue
+                        
+                    if val not in [None, '']:
+                        if field.field_type == 'NUMBER':
+                            try:
+                                float(val)
+                            except ValueError:
+                                errors[field.name] = "Must be a valid number."
+                                
+                        elif field.field_type in ['DROPDOWN', 'COLOR_STATUS']:
+                            valid_values = [opt.get('value') for opt in field.options_metadata]
+                            if val not in valid_values:
+                                errors[field.name] = f"Invalid option. Allowed: {valid_values}"
+                        
+                        cleaned_dynamic_data[field.name] = val
 
             if errors:
                 raise serializers.ValidationError({"dynamic_data": errors})
 
-            # Reemplazamos el payload sucio con el diccionario purgado y validado
-            data['dynamic_data'] = cleaned_dynamic_data
+            if 'dynamic_data' in data:
+                data['dynamic_data'] = cleaned_dynamic_data
 
         return data
