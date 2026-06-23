@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Location, AssetCategory, CategoryField, Asset
+from .models import Location, AssetCategory, CategoryField, Asset, UserTablePreference
 
 class LocationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -55,7 +55,7 @@ class AssetSerializer(serializers.ModelSerializer):
 
             for field in category_fields:
                 
-                # 1. INTERCEPTOR DE LLAVES FORÁNEAS (ESTO ES LO QUE FALTABA)
+                # Interceptores de llaves foráneas
                 if field.field_type == 'LOCATION':
                     val = data.get('location') if 'location' in data else getattr(self.instance, 'location', None)
                     if field.is_required and not val:
@@ -68,7 +68,6 @@ class AssetSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError({"assigned_to": ["Employee assignment is required."]})
                     continue
 
-              
                 if 'dynamic_data' in data:
                     val = dynamic_data.get(field.name)
                     
@@ -97,3 +96,16 @@ class AssetSerializer(serializers.ModelSerializer):
                 data['dynamic_data'] = cleaned_dynamic_data
 
         return data
+
+# ---------------------------------------------------------
+# USER VIEW PREFERENCES SERIALIZER
+# ---------------------------------------------------------
+class UserTablePreferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserTablePreference
+        fields = ['category', 'columns_config', 'updated_at']
+
+    def validate_columns_config(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("columns_config must be a list of layout objects.")
+        return value

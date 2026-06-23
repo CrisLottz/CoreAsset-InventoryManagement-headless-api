@@ -97,3 +97,26 @@ class Asset(models.Model):
 
     def __str__(self):
         return f"{self.internal_tag} ({self.category.name})"
+    
+
+class UserTablePreference(models.Model):
+    user = models.ForeignKey(
+        'users.User', 
+        on_delete=models.CASCADE, 
+        related_name='table_preferences'
+    )
+    category = models.ForeignKey(
+        'AssetCategory', 
+        on_delete=models.CASCADE, 
+        related_name='user_preferences'
+    )
+    # Almacena una lista ordenada: [{"name": "Status", "is_visible": True, "order": 0}]
+    columns_config = models.JSONField(default=list)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'asset_user_table_preferences'
+        unique_together = ('user', 'category') # Un usuario solo tiene una configuración por categoría
+
+    def __str__(self):
+        return f"{self.user.email} - {self.category.name} Preference"    
