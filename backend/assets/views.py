@@ -1,12 +1,11 @@
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import DjangoModelPermissions
-from rest_framework.exceptions import PermissionDenied
-from django.core.cache import cache
-from django.conf import settings
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from django.db.models import Q
 
-from .models import Location, AssetCategory, Asset
-from .serializers import LocationSerializer, AssetCategorySerializer, AssetSerializer
+from .models import Location, AssetCategory, Asset, UserTablePreference
+from .serializers import LocationSerializer, AssetCategorySerializer, AssetSerializer, UserTablePreferenceSerializer
 from .permissions import IsLocationManagerStrict
 
 class LocationViewSet(viewsets.ModelViewSet):
@@ -15,74 +14,93 @@ class LocationViewSet(viewsets.ModelViewSet):
     permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
 
 class CategoryStructureViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Endpoint White-Label. Despacha la configuración de módulos activa.
-    El frontend usa esto para saber qué inputs y columnas dibujar.
-    """
-    # prefetch_related optimiza la subconsulta SQL de los CategoryFields
     queryset = AssetCategory.objects.prefetch_related('fields').filter(is_hidden=False).order_by('display_order')
     serializer_class = AssetCategorySerializer
     permission_classes = [DjangoModelPermissions]
 
+@extend_schema_view(
+    list=extend_schema(
+        summary="Retrieve paginated assets with targeted server-side filtering and sorting",
+        parameters=[
+            OpenApiParameter(name='category', description='Filter by Category UUID', required=True, type=str),
+            OpenApiParameter(name='location', description='Filter by Location UUID', required=False, type=str),
+            OpenApiParameter(name='search', description='Search text', required=False, type=str),
+            OpenApiParameter(name='search_field', description='Target field for search', required=False, type=str),
+            OpenApiParameter(name='ordering', description='Sort field (e.g. internal_tag, -created_at)', required=False, type=str),
+        ]
+    )
+)
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
-    permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
 
     def get_queryset(self):
-        user = self.request.user
-        # JOIN optimizado con la nueva arquitectura
-        queryset = Asset.objects.select_related('location', 'category', 'assigned_to').all().order_by('-created_at')
+        queryset = Asset.objects.all() 
+        
+        category_id = self.request.query_params.get('category')
+        location_id = self.request.query_params.get('location')
+        search_query = self.request.query_params.get('search')
+        search_field = self.request.query_params.get('search_field')
+        ordering = self.request.query_params.get('ordering', '-created_at')
 
-        if not user.is_superuser and not user.has_perm('assets.view_global_inventory'):
-            queryset = queryset.filter(location__in=user.assigned_locations.all())
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
 
-        location_id = self.request.query_params.get('location_id')
         if location_id:
             queryset = queryset.filter(location_id=location_id)
 
+        # 3. Targeted Search Engine (Zoho Style)
+        if search_query and search_field:
+            if search_field == 'internal_tag':
+                queryset = queryset.filter(internal_tag__icontains=search_query)
+            elif search_field == 'location':
+                queryset = queryset.filter(location__name__icontains=search_query)
+            elif search_field == 'assigned_to':
+                queryset = queryset.filter(
+                    Q(assigned_to__first_name__icontains=search_query) | 
+                    Q(assigned_to__last_name__icontains=search_query)
+                )
+            else:
+                # Penetración en JSONB con normalización de espacios (A11y Friendly)
+                lookup = f"dynamic_data__{search_field}__icontains"
+                query_with_underscores = search_query.replace(' ', '_')
+                
+                # Busca simultáneamente "In use" o "In_use"
+                queryset = queryset.filter(
+                    Q(**{lookup: search_query}) | Q(**{lookup: query_with_underscores})
+                )
+
+        if ordering:
+            if ordering in ['internal_tag', '-internal_tag', 'created_at', '-created_at']:
+                queryset = queryset.order_by(ordering)
+            else:
+                clean_order = ordering.lstrip('-')
+                if ordering.startswith('-'):
+                    queryset = queryset.order_by(f'-dynamic_data__{clean_order}')
+                else:
+                    queryset = queryset.order_by(f'dynamic_data__{clean_order}')
+
         return queryset
 
-    def list(self, request, *args, **kwargs):
-        location_id = request.query_params.get('location_id', 'all')
-        cache_key = f"inventory_user_{request.user.id}_loc_{location_id}"
-
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response(cached_data)
-
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            response_data = self.get_paginated_response(serializer.data).data
-        else:
-            serializer = self.get_serializer(queryset, many=True)
-            response_data = serializer.data
-
-        cache.set(cache_key, response_data, timeout=getattr(settings, 'CACHE_TTL', 900))
-        return Response(response_data)
-
-    def _invalidate_user_cache(self):
-        pattern = f"inventory_user_{self.request.user.id}_*"
-        cache.delete_pattern(pattern)
+class UserTablePreferenceViewSet(viewsets.ModelViewSet):
+    serializer_class = UserTablePreferenceSerializer
+    def get_queryset(self):
+        return UserTablePreference.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        user = self.request.user
-        location = serializer.validated_data.get('location')
+        serializer.save(user=self.request.user)
 
-        # Permitimos activos sin sede (ej. Licencias Virtuales)
-        if location and not user.is_superuser and not user.has_perm('assets.manage_global_inventory'):
-            if not user.assigned_locations.filter(id=location.id).exists():
-                raise PermissionDenied("Not authorized to create assets in this location.")
+    @extend_schema(
+        summary="Save or update column layout preferences for a category table",
+        responses={200: UserTablePreferenceSerializer}
+    )
+    def create(self, request, *skip_args, **skip_kwargs):
+        category_id = request.data.get('category')
+        columns_config = request.data.get('columns_config')
 
-        serializer.save()
-        self._invalidate_user_cache()
-
-    def perform_update(self, serializer):
-        serializer.save()
-        self._invalidate_user_cache()
-
-    def perform_destroy(self, instance):
-        instance.delete()
-        self._invalidate_user_cache()
+        pref, created = UserTablePreference.objects.update_or_create(
+            user=request.user,
+            category_id=category_id,
+            defaults={'columns_config': columns_config}
+        )
+        serializer = self.get_serializer(pref)
+        return Response(serializer.data, status=status.HTTP_200_OK)
