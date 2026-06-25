@@ -1,5 +1,5 @@
-<div align="center">
-
+<div align="center"> 
+ 
 # CoreAsset — Inventory Management Headless API
 
 **Multi-Tenant Backend Engine for Asset Tracking, Identity Governance & Automated Compliance**
@@ -26,7 +26,7 @@
 
 </div>
 
-## Table of Contents
+## Table of Contents 
 
 - [Overview](#overview)
 - [Key Features](#key-features)
@@ -38,6 +38,7 @@
   - [5. Cache & Performance — Redis Write-Through](#5-cache--performance--redis-write-through)
   - [6. Security Hardening — Pickle RCE Mitigation](#6-security-hardening--pickle-rce-mitigation)
   - [7. Compliance Engine — Audit Middleware](#7-compliance-engine--audit-middleware)
+- [Security & Compliance Standards](#security-&-compliance-standards)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Installation & Local Deployment](#installation--local-deployment)
@@ -178,7 +179,7 @@ class Asset(models.Model):
 
 ---
 
-### 4. Declarative Validation — jsonschema
+### 4. Declarative Validation — jsonschema 
 
 > **Decision**: Protect the JSONB column with a `jsonschema` contract in the DRF serializer — not with imperative `if/else` chains in Python.
 
@@ -210,7 +211,7 @@ ASSET_METADATA_SCHEMA = {
 }
 ```
 
-**Design trade-off**: Technical fields like `mac_address` and `cpu` are validated **if present** but are not required. This prevents blocking logistics operators who register assets before technical details are available. However, the `tenant` field for licenses **is** required because a license without an owner is semantically useless.
+**Design trade-off**: Technical fields like `mac_address` and `cpu` are validated **if present** but are not a requirement. This prevents blocking logistics operators who register assets before technical details are available. However, the `tenant` field for licenses **is** required because a license without an owner is semantically useless.
 
 The validation fires at the serializer layer — before any database write:
 
@@ -311,6 +312,19 @@ class AuditMiddleware:
 
 ---
 
+## Security & Compliance Standards
+
+The architectural foundation of this API is engineered to align with industry-leading security frameworks and compliance mandates:
+
+* **SOC 2 Type II Readiness (Audit & Accountability):** The system features an immutable audit trail (`AuditMiddleware`). Every state-mutating request is automatically logged to a JSONB store. The relational design enforces `on_delete=models.PROTECT` on user accounts, guaranteeing that the chain of custody for historical asset modifications cannot be destroyed by administrative deletion.
+* **OWASP Top 10 Mitigation:**
+  * **A01:2021-Broken Access Control:** Mitigated via multi-layered RBAC and strict geographical boundary enforcement (`IsLocationManagerStrict`). Even authenticated managers cannot inject records into unauthorized locations.
+  * **A05:2021-Security Misconfiguration:** All internal container ports (Redis, PostgreSQL) are bound strictly to loopback interfaces (`127.0.0.1`) with required authentication, eliminating external network attack vectors for Remote Code Execution (RCE).
+  * **A08:2021-Software and Data Integrity Failures:** Defended by declarative JSON Schema validation at the DRF serialization layer, ensuring the database never processes malformed or malicious payloads.
+
+---
+
+
 ## Project Structure
 
 ```
@@ -383,7 +397,17 @@ git clone https://github.com/CrisLottz/CoreAsset-RBAC-Inventory-Engine.git
 cd CoreAsset-RBAC-Inventory-Engine
 ```
 
-### 2. Build and start all services
+### 2. Configure Environment Variables
+
+Create your local environment file from the provided template. This step is **strictly required** to authorize your custom frontend's domain via CORS.
+
+```bash
+cp .env.example .env
+```
+
+*Open `.env` and edit `CORS_ALLOWED_ORIGINS` to match your frontend's port or domain (e.g., `http://localhost:4321`).*
+
+### 3. Build and start all services
 
 ```bash
 docker compose up --build
@@ -391,7 +415,7 @@ docker compose up --build
 
 > First build takes ~60–90s (Python image + Poetry dependency install). Subsequent starts are near-instant.
 
-### 3. Apply database migrations
+### 4. Apply database migrations
 
 Open a second terminal:
 
@@ -399,13 +423,13 @@ Open a second terminal:
 docker compose exec backend python manage.py migrate
 ```
 
-### 4. Create a superuser
+### 5. Create a superuser
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 5. Verify the stack
+### 6. Verify the stack
 
 | Service | URL |
 |---|---|
@@ -556,6 +580,7 @@ All endpoints are versioned under `/api/v1/`. Authentication is managed via sess
   - [5. Caché y Rendimiento — Redis Write-Through](#5-caché-y-rendimiento--redis-write-through)
   - [6. Blindaje de Seguridad — Mitigación Pickle RCE](#6-blindaje-de-seguridad--mitigación-pickle-rce)
   - [7. Motor de Cumplimiento — Middleware de Auditoría](#7-motor-de-cumplimiento--middleware-de-auditoría)
+- [Estándares de Seguridad y Cumplimiento](#estandares-de-seguridad-y-cumplimiento)
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Prerrequisitos](#prerrequisitos)
 - [Instalación y Despliegue Local](#instalación-y-despliegue-local)
@@ -829,6 +854,18 @@ class AuditMiddleware:
 
 ---
 
+## Estándares de Seguridad y Cumplimiento
+
+La base arquitectónica de esta API está diseñada para alinearse con los marcos de seguridad y mandatos de cumplimiento líderes en la industria:
+
+* **Preparación para SOC 2 Type II (Auditoría y Responsabilidad):** El sistema cuenta con una pista de auditoría inmutable (`AuditMiddleware`). Cada petición que muta estado se registra automáticamente en un almacén JSONB. El diseño relacional impone `on_delete=models.PROTECT` en las cuentas de usuario, garantizando que la cadena de custodia de las modificaciones históricas de activos no pueda ser destruida por eliminaciones administrativas.
+* **Mitigación OWASP Top 10:**
+  * **A01:2021-Broken Access Control:** Mitigado a través de RBAC multicapa y una aplicación estricta de límites geográficos (`IsLocationManagerStrict`). Ni siquiera los gerentes autenticados pueden inyectar registros en sedes no autorizadas.
+  * **A05:2021-Security Misconfiguration:** Todos los puertos internos de contenedores (Redis, PostgreSQL) están vinculados estrictamente a interfaces de loopback (`127.0.0.1`) con autenticación requerida, eliminando vectores de ataque de red externos para Ejecución Remota de Código (RCE).
+  * **A08:2021-Software and Data Integrity Failures:** Defendido mediante validación declarativa de JSON Schema en la capa de serialización de DRF, asegurando que la base de datos nunca procese payloads malformados o maliciosos.
+ 
+---
+
 ## Estructura del Proyecto
 
 ```
@@ -900,8 +937,17 @@ No se requiere instalación local de Python, PostgreSQL ni Redis. Todo corre den
 git clone https://github.com/CrisLottz/CoreAsset-RBAC-Inventory-Engine.git
 cd CoreAsset-RBAC-Inventory-Engine
 ```
+### 2. Configurar Variables de Entorno
 
-### 2. Construir e iniciar todos los servicios
+Crea tu archivo de entorno local a partir de la plantilla provista. Este paso es **estrictamente obligatorio** para autorizar el dominio de tu frontend personalizado mediante CORS.
+
+```bash
+cp .env.example .env
+```
+
+*Abre el archivo `.env` y edita `CORS_ALLOWED_ORIGINS` para que coincida con el puerto o dominio de tu frontend (ej. `http://localhost:4321`).*
+
+### 3. Construir e iniciar todos los servicios
 
 ```bash
 docker compose up --build
@@ -909,7 +955,7 @@ docker compose up --build
 
 > La primera construcción tarda ~60–90s (imagen Python + instalación de dependencias con Poetry). Los arranques posteriores son casi instantáneos.
 
-### 3. Aplicar las migraciones de base de datos
+### 4. Aplicar las migraciones de base de datos
 
 Abrir una segunda terminal:
 
@@ -917,13 +963,13 @@ Abrir una segunda terminal:
 docker compose exec backend python manage.py migrate
 ```
 
-### 4. Crear un superusuario
+### 5. Crear un superusuario
 
 ```bash
 docker compose exec backend python manage.py createsuperuser
 ```
 
-### 5. Verificar el stack
+### 6. Verificar el stack
 
 | Servicio | URL |
 |---|---|
