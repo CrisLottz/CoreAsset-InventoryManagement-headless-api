@@ -27,6 +27,7 @@ class CategoryStructureViewSet(viewsets.ReadOnlyModelViewSet):
             OpenApiParameter(name='location', description='Filter by Location UUID', required=False, type=str),
             OpenApiParameter(name='search', description='Search text', required=False, type=str),
             OpenApiParameter(name='search_field', description='Target field for search', required=False, type=str),
+            OpenApiParameter(name='assigned_to_null', description='Filter strictly unassigned assets', required=False, type=str),
             OpenApiParameter(name='ordering', description='Sort field (e.g. internal_tag, -created_at)', required=False, type=str),
         ]
     )
@@ -41,6 +42,7 @@ class AssetViewSet(viewsets.ModelViewSet):
         location_id = self.request.query_params.get('location')
         search_query = self.request.query_params.get('search')
         search_field = self.request.query_params.get('search_field')
+        assigned_to_null = self.request.query_params.get('assigned_to_null')
         ordering = self.request.query_params.get('ordering', '-created_at')
 
         if category_id:
@@ -50,13 +52,15 @@ class AssetViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(location_id=location_id)
 
         # 3. Targeted Search Engine (Zoho Style)
-        if search_query and search_field:
+        if search_field == 'assigned_to' and assigned_to_null == 'true':
+            # Intercepta el estado del toggle y evalúa la nulidad en la base de datos
+            queryset = queryset.filter(assigned_to__isnull=True)
+        elif search_query and search_field:
             if search_field == 'internal_tag':
                 queryset = queryset.filter(internal_tag__icontains=search_query)
             elif search_field == 'location':
                 queryset = queryset.filter(location__name__icontains=search_query)
             elif search_field == 'assigned_to':
-                # Anotación en memoria: Crea columna virtual uniendo "Nombre Apellido"
                 queryset = queryset.annotate(
                     full_name=Concat('assigned_to__first_name', Value(' '), 'assigned_to__last_name')
                 ).filter(
@@ -65,7 +69,6 @@ class AssetViewSet(viewsets.ModelViewSet):
                     Q(assigned_to__last_name__icontains=search_query)
                 )
             else:
-                # Penetración en JSONB Bi-direccional (Espacios <-> Guiones Bajos)
                 lookup = f"dynamic_data__{search_field}__icontains"
                 query_with_underscores = search_query.replace(' ', '_')
                 query_with_spaces = search_query.replace('_', ' ')
