@@ -2,7 +2,8 @@ from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import DjangoModelPermissions
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from django.db.models import Q
+from django.db.models import Q, Value
+from django.db.models.functions import Concat
 
 from .models import Location, AssetCategory, Asset, UserTablePreference
 from .serializers import LocationSerializer, AssetCategorySerializer, AssetSerializer, UserTablePreferenceSerializer
@@ -55,18 +56,24 @@ class AssetViewSet(viewsets.ModelViewSet):
             elif search_field == 'location':
                 queryset = queryset.filter(location__name__icontains=search_query)
             elif search_field == 'assigned_to':
-                queryset = queryset.filter(
-                    Q(assigned_to__first_name__icontains=search_query) | 
+                # Anotación en memoria: Crea columna virtual uniendo "Nombre Apellido"
+                queryset = queryset.annotate(
+                    full_name=Concat('assigned_to__first_name', Value(' '), 'assigned_to__last_name')
+                ).filter(
+                    Q(full_name__icontains=search_query) |
+                    Q(assigned_to__first_name__icontains=search_query) |
                     Q(assigned_to__last_name__icontains=search_query)
                 )
             else:
-                # Penetración en JSONB con normalización de espacios (A11y Friendly)
+                # Penetración en JSONB Bi-direccional (Espacios <-> Guiones Bajos)
                 lookup = f"dynamic_data__{search_field}__icontains"
                 query_with_underscores = search_query.replace(' ', '_')
+                query_with_spaces = search_query.replace('_', ' ')
                 
-                # Busca simultáneamente "In use" o "In_use"
                 queryset = queryset.filter(
-                    Q(**{lookup: search_query}) | Q(**{lookup: query_with_underscores})
+                    Q(**{lookup: search_query}) | 
+                    Q(**{lookup: query_with_underscores}) |
+                    Q(**{lookup: query_with_spaces})
                 )
 
         if ordering:
