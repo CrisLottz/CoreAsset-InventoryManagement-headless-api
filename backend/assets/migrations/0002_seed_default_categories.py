@@ -7,37 +7,37 @@ def seed_categories(apps, schema_editor):
     AssetCategory = apps.get_model('assets', 'AssetCategory')
     CategoryField = apps.get_model('assets', 'CategoryField')
 
-    # Diccionarios de estados comunes
+    # Diccionarios de estados comunes (Homologados Label = Value)
     device_status = [
-        {"label": "In Use", "value": "in_use", "color": "Green"},
-        {"label": "Stored", "value": "stored", "color": "Gray"},
-        {"label": "In Delivery", "value": "in_delivery", "color": "Purple"},
-        {"label": "Damaged", "value": "damaged", "color": "Yellow"},
-        {"label": "Stolen", "value": "stolen", "color": "Red"},
-        {"label": "Missing", "value": "missing", "color": "Red"},
+        {"label": "In Use", "value": "In Use", "color": "Green"},
+        {"label": "Stored", "value": "Stored", "color": "Gray"},
+        {"label": "In Delivery", "value": "In Delivery", "color": "Purple"},
+        {"label": "Damaged", "value": "Damaged", "color": "Yellow"},
+        {"label": "Stolen", "value": "Stolen", "color": "Red"},
+        {"label": "Missing", "value": "Missing", "color": "Red"},
     ]
 
     infra_status = [
-        {"label": "Active", "value": "active", "color": "Green"},
-        {"label": "Stored", "value": "stored", "color": "Gray"},
-        {"label": "Damaged", "value": "damaged", "color": "Yellow"},
-        {"label": "Stolen", "value": "stolen", "color": "Red"},
-        {"label": "Missing", "value": "missing", "color": "Red"},
+        {"label": "Active", "value": "Active", "color": "Green"},
+        {"label": "Stored", "value": "Stored", "color": "Gray"},
+        {"label": "Damaged", "value": "Damaged", "color": "Yellow"},
+        {"label": "Stolen", "value": "Stolen", "color": "Red"},
+        {"label": "Missing", "value": "Missing", "color": "Red"},
     ]
 
     license_status = [
-        {"label": "In Use", "value": "in_use", "color": "Green"},
-        {"label": "Not in Use", "value": "not_in_use", "color": "Gray"},
+        {"label": "In Use", "value": "In Use", "color": "Green"},
+        {"label": "Not in Use", "value": "Not in Use", "color": "Gray"},
     ]
 
-    # Estructura Maestra del SaaS
+    # Estructura Maestra del SaaS (Homologada)
     categories_data = [
         {
             "name": "PCs / Laptops",
             "icon": "desktop-pc",
             "order": 10,
             "fields": [
-                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Desktop Computer", "value": "desktop"}, {"label": "Laptop", "value": "laptop"}]},
+                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Desktop Computer", "value": "Desktop Computer"}, {"label": "Laptop", "value": "Laptop"}]},
                 {"name": "Status", "type": "COLOR_STATUS", "req": True, "locked": True, "opts": device_status},
                 {"name": "Assigned To", "type": "EMPLOYEE", "req": True, "locked": False, "opts": []},
                 {"name": "Location", "type": "LOCATION", "req": True, "locked": False, "opts": []},
@@ -50,7 +50,7 @@ def seed_categories(apps, schema_editor):
             "icon": "device-phone-mobile",
             "order": 20,
             "fields": [
-                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Corporate Phone", "value": "corporate_phone"}, {"label": "Tablet", "value": "tablet"}]},
+                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Corporate Phone", "value": "Corporate Phone"}, {"label": "Tablet", "value": "Tablet"}]},
                 {"name": "Status", "type": "COLOR_STATUS", "req": True, "locked": True, "opts": device_status},
                 {"name": "Assigned To", "type": "EMPLOYEE", "req": True, "locked": False, "opts": []},
                 {"name": "Location", "type": "LOCATION", "req": True, "locked": False, "opts": []},
@@ -63,7 +63,7 @@ def seed_categories(apps, schema_editor):
             "icon": "server",
             "order": 30,
             "fields": [
-                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "IPv4 Router", "value": "ipv4_router"}, {"label": "IPv6 Router", "value": "ipv6_router"}, {"label": "Dual-Stack Router", "value": "dual_stack"}, {"label": "Wifi Repeater", "value": "wifi_repeater"}]},
+                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "IPv4 Router", "value": "IPv4 Router"}, {"label": "IPv6 Router", "value": "IPv6 Router"}, {"label": "Dual-Stack Router", "value": "Dual-Stack Router"}, {"label": "Wifi Repeater", "value": "Wifi Repeater"}]},
                 {"name": "Status", "type": "COLOR_STATUS", "req": True, "locked": True, "opts": infra_status},
                 {"name": "Location", "type": "LOCATION", "req": True, "locked": False, "opts": []},
                 {"name": "Model", "type": "TEXT", "req": False, "locked": False, "opts": []},
@@ -75,7 +75,7 @@ def seed_categories(apps, schema_editor):
             "icon": "printer",
             "order": 40,
             "fields": [
-                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Canon Printer", "value": "canon"}, {"label": "Xerox Printer", "value": "xerox"}, {"label": "Kyocera Printer", "value": "kyocera"}]},
+                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Canon Printer", "value": "Canon Printer"}, {"label": "Xerox Printer", "value": "Xerox Printer"}, {"label": "Kyocera Printer", "value": "Kyocera Printer"}]},
                 {"name": "Status", "type": "COLOR_STATUS", "req": True, "locked": True, "opts": infra_status},
                 {"name": "Location", "type": "LOCATION", "req": True, "locked": False, "opts": []},
                 {"name": "Model", "type": "TEXT", "req": False, "locked": False, "opts": []},
@@ -87,7 +87,7 @@ def seed_categories(apps, schema_editor):
             "icon": "video-camera",
             "order": 50,
             "fields": [
-                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Vivint Camera", "value": "vivint"}]},
+                {"name": "Type", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Vivint Camera", "value": "Vivint Camera"}]},
                 {"name": "Status", "type": "COLOR_STATUS", "req": True, "locked": True, "opts": infra_status},
                 {"name": "Location", "type": "LOCATION", "req": True, "locked": False, "opts": []},
                 {"name": "Room", "type": "TEXT", "req": False, "locked": False, "opts": []},
@@ -100,7 +100,7 @@ def seed_categories(apps, schema_editor):
             "icon": "key",
             "order": 60,
             "fields": [
-                {"name": "Software", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Microsoft 365 E3", "value": "m365_e3"}, {"label": "Microsoft Business Basic", "value": "ms_bus_basic"}, {"label": "Microsoft Business Standard", "value": "ms_bus_std"}, {"label": "Slack Standard User", "value": "slack_std"}, {"label": "Hubstaff User", "value": "hubstaff"}]},
+                {"name": "Software", "type": "DROPDOWN", "req": True, "locked": True, "opts": [{"label": "Microsoft 365 E3", "value": "Microsoft 365 E3"}, {"label": "Microsoft Business Basic", "value": "Microsoft Business Basic"}, {"label": "Microsoft Business Standard", "value": "Microsoft Business Standard"}, {"label": "Slack Standard User", "value": "Slack Standard User"}, {"label": "Hubstaff User", "value": "Hubstaff User"}]},
                 {"name": "Status", "type": "COLOR_STATUS", "req": True, "locked": True, "opts": license_status},
                 {"name": "Assigned To", "type": "EMPLOYEE", "req": True, "locked": False, "opts": []},
                 {"name": "Observations", "type": "LONG_TEXT", "req": False, "locked": False, "opts": []},
