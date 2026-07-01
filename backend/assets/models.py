@@ -53,8 +53,15 @@ class CategoryField(models.Model):
     is_locked = models.BooleanField(default=False, help_text=_("System fields cannot be modified/deleted"))
     options_metadata = models.JSONField(default=list, blank=True, help_text=_("JSON array for dropdown/color options"))
     
+    # 1. INYECTAMOS EL CONTROL DE ORDENAMIENTO
+    display_order = models.IntegerField(default=0)
+    
     class Meta:
         unique_together = ('category', 'name')
+        # 2. FORZAMOS A LA BASE DE DATOS A ORDENAR AUTOMÁTICAMENTE
+        # -is_locked pone los System PK obligatoriamente arriba.
+        # display_order respeta el ordenamiento manual del usuario para el resto de campos.
+        ordering = ['-is_locked', 'display_order']
     
     def __str__(self):
         return f"{self.category.name} - {self.name} ({self.field_type})"
