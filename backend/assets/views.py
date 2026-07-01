@@ -14,7 +14,7 @@ class LocationViewSet(viewsets.ModelViewSet):
     serializer_class = LocationSerializer
     permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
 
-class CategoryStructureViewSet(viewsets.ReadOnlyModelViewSet):
+class CategoryStructureViewSet(viewsets.ModelViewSet): # <-- Habilitada la capa de mutación
     queryset = AssetCategory.objects.prefetch_related('fields').filter(is_hidden=False).order_by('display_order')
     serializer_class = AssetCategorySerializer
     permission_classes = [DjangoModelPermissions]
@@ -53,7 +53,6 @@ class AssetViewSet(viewsets.ModelViewSet):
 
         # 3. Targeted Search Engine (Zoho Style)
         if search_field == 'assigned_to' and assigned_to_null == 'true':
-            # Intercepta el estado del toggle y evalúa la nulidad en la base de datos
             queryset = queryset.filter(assigned_to__isnull=True)
         elif search_query and search_field:
             if search_field == 'internal_tag':
@@ -93,6 +92,7 @@ class AssetViewSet(viewsets.ModelViewSet):
 
 class UserTablePreferenceViewSet(viewsets.ModelViewSet):
     serializer_class = UserTablePreferenceSerializer
+    
     def get_queryset(self):
         return UserTablePreference.objects.filter(user=self.request.user)
 
