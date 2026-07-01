@@ -1,4 +1,6 @@
+import uuid
 from rest_framework import serializers
+from django.db import transaction
 from .models import Location, AssetCategory, CategoryField, Asset, UserTablePreference
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -8,19 +10,96 @@ class LocationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
 # ---------------------------------------------------------
-# STRUCTURE SERIALIZERS (UI Contract)
+# STRUCTURE SERIALIZERS (UI Contract & Nested Mutations)
 # ---------------------------------------------------------
 class CategoryFieldSerializer(serializers.ModelSerializer):
+    id = serializers.CharField(required=False) # Permite strings temporales como 'new-123' del frontend
+
     class Meta:
         model = CategoryField
         fields = ['id', 'name', 'field_type', 'is_required', 'is_locked', 'options_metadata']
 
 class AssetCategorySerializer(serializers.ModelSerializer):
-    fields = CategoryFieldSerializer(many=True, read_only=True)
+    # Removido read_only=True para permitir mutaciones de escritura anidada
+    fields = CategoryFieldSerializer(many=True, required=False)
 
     class Meta:
         model = AssetCategory
         fields = ['id', 'name', 'icon', 'is_system_default', 'is_hidden', 'display_order', 'fields']
+
+    def create(self, validated_data):
+        fields_data = validated_data.pop('fields', [])
+        
+        with transaction.atomic():
+            category = AssetCategory.objects.create(**validated_data)
+            
+            for field_item in fields_data:
+                CategoryField.objects.create(
+                    id=uuid.uuid4(),
+                    category=category,
+                    name=field_item.get('name'),
+                    field_type=field_item.get('field_type'),
+                    is_required=field_item.get('is_required', False),
+                    is_locked=False,
+                    options_metadata=field_item.get('options_metadata', [])
+                )
+        return category
+
+    def update(self, instance, validated_data):
+        fields_data = validated_data.pop('fields', [])
+        
+        # Encapsulamiento en Transacción Atómica de PostgreSQL
+        with transaction.atomic():
+            # 1. Actualizar metadatos principales del Módulo
+            instance.name = validated_data.get('name', instance.name)
+            instance.icon = validated_data.get('icon', instance.icon)
+            instance.is_hidden = validated_data.get('is_hidden', instance.is_hidden)
+            instance.display_order = validated_data.get('display_order', instance.display_order)
+            instance.save()
+
+            # 2. Orquestar campos dinámicos
+            keep_fields_ids = []
+            
+            for field_item in fields_data:
+                field_id = field_item.get('id')
+                
+                # Caso A: Campo Nuevo (Inyectado por React)
+                if not field_id or str(field_id).startswith('new-'):
+                    new_field = CategoryField.objects.create(
+                        id=uuid.uuid4(),
+                        category=instance,
+                        name=field_item.get('name'),
+                        field_type=field_item.get('field_type'),
+                        is_required=field_item.get('is_required', False),
+                        is_locked=False,
+                        options_metadata=field_item.get('options_metadata', [])
+                    )
+                    keep_fields_ids.append(new_field.id)
+                
+                # Caso B: Campo Existente
+                else:
+                    try:
+                        db_field = CategoryField.objects.get(id=field_id, category=instance)
+                        
+                        # Salvaguarda arquitectónica: Evitar corrupción JSONB
+                        if db_field.field_type != field_item.get('field_type') and not db_field.is_locked:
+                            raise serializers.ValidationError(
+                                f"Forbidden: Altering data type of field '{db_field.name}' from {db_field.field_type} to {field_item.get('field_type')} is blocked."
+                            )
+                        
+                        db_field.name = field_item.get('name', db_field.name)
+                        db_field.is_required = field_item.get('is_required', db_field.is_required)
+                        db_field.options_metadata = field_item.get('options_metadata', db_field.options_metadata)
+                        db_field.save()
+                        
+                        keep_fields_ids.append(db_field.id)
+                    except CategoryField.DoesNotExist:
+                        pass 
+
+            # 3. Limpieza: Borrar campos excluidos que no estén bloqueados por el sistema
+            CategoryField.objects.filter(category=instance).exclude(id__in=keep_fields_ids).filter(is_locked=False).delete()
+
+        return instance
 
 # ---------------------------------------------------------
 # POLYMORPHIC ASSET SERIALIZER (Mutations)
@@ -55,7 +134,6 @@ class AssetSerializer(serializers.ModelSerializer):
 
             for field in category_fields:
                 
-                # Interceptores de llaves foráneas
                 if field.field_type == 'LOCATION':
                     val = data.get('location') if 'location' in data else getattr(self.instance, 'location', None)
                     if field.is_required and not val:
