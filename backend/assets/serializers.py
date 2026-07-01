@@ -33,15 +33,16 @@ class AssetCategorySerializer(serializers.ModelSerializer):
         with transaction.atomic():
             category = AssetCategory.objects.create(**validated_data)
             
-            for field_item in fields_data:
+            for index, field_item in enumerate(fields_data):
                 CategoryField.objects.create(
                     id=uuid.uuid4(),
                     category=category,
                     name=field_item.get('name'),
                     field_type=field_item.get('field_type'),
                     is_required=field_item.get('is_required', False),
-                    is_locked=False,
-                    options_metadata=field_item.get('options_metadata', [])
+                    is_locked=field_item.get('is_locked', False),
+                    options_metadata=field_item.get('options_metadata', []),
+                    display_order=index  # <-- Captura el índice del array del frontend
                 )
         return category
 
@@ -60,7 +61,7 @@ class AssetCategorySerializer(serializers.ModelSerializer):
             # 2. Orquestar campos dinámicos
             keep_fields_ids = []
             
-            for field_item in fields_data:
+            for index, field_item in enumerate(fields_data):
                 field_id = field_item.get('id')
                 
                 # Caso A: Campo Nuevo (Inyectado por React)
@@ -71,8 +72,9 @@ class AssetCategorySerializer(serializers.ModelSerializer):
                         name=field_item.get('name'),
                         field_type=field_item.get('field_type'),
                         is_required=field_item.get('is_required', False),
-                        is_locked=False,
-                        options_metadata=field_item.get('options_metadata', [])
+                        is_locked=field_item.get('is_locked', False),
+                        options_metadata=field_item.get('options_metadata', []),
+                        display_order=index  # <-- Captura la posición en la que fue droppeado
                     )
                     keep_fields_ids.append(new_field.id)
                 
@@ -90,6 +92,7 @@ class AssetCategorySerializer(serializers.ModelSerializer):
                         db_field.name = field_item.get('name', db_field.name)
                         db_field.is_required = field_item.get('is_required', db_field.is_required)
                         db_field.options_metadata = field_item.get('options_metadata', db_field.options_metadata)
+                        db_field.display_order = index  # <-- Actualiza la posición tras un drag and drop
                         db_field.save()
                         
                         keep_fields_ids.append(db_field.id)
