@@ -38,7 +38,8 @@
   - [5. Cache & Performance — Redis Write-Through](#5-cache--performance--redis-write-through)
   - [6. Security Hardening — Pickle RCE Mitigation](#6-security-hardening--pickle-rce-mitigation)
   - [7. Compliance Engine — Audit Middleware](#7-compliance-engine--audit-middleware)
-- [Security & Compliance Standards](#security-&-compliance-standards)
+  - [8. Destructive Action Safeguards](#8-destructive-action-safeguards)
+- [Security & Compliance Standards](#security--compliance-standards)
 - [Project Structure](#project-structure)
 - [Prerequisites](#prerequisites)
 - [Installation & Local Deployment](#installation--local-deployment)
@@ -316,6 +317,35 @@ class AuditMiddleware:
 **`on_delete=models.PROTECT`**: The `actor` foreign key blocks deletion of any user who has audit records. This is a deliberate, hard database-level constraint — the legal chain of custody cannot be broken through a UI action.
 
 **JSONB storage**: The `metadata_json` field uses PostgreSQL's native `jsonb` type, enabling indexed queries over the audit payload without schema changes as the captured fields evolve.
+
+---
+
+### 8. Destructive Action Safeguards
+
+> **Decision**: Standard `DELETE` operations act as non-destructive "Soft Deletes". Permanent data destruction requires a separate endpoint and an out-of-band administrative re-authentication step.
+
+```python
+# Non-destructive Soft Delete (Deactivate)
+def perform_destroy(self, instance):
+    instance.is_active = False
+    instance.save()
+
+# Destructive Hard Delete (Requires Re-Authentication)
+@action(detail=True, methods=['post'], url_path='hard-delete')
+def hard_delete(self, request, pk=None):
+    instance = self.get_object()
+    password = request.data.get('password')
+    user = authenticate(username=request.user.username, password=password)
+    
+    if user is not None:
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+```
+
+**Why separate Soft and Hard Deletes?**
+- **Data Integrity**: Soft deletes preserve relational integrity (e.g. historical audit logs tied to an employee) while preventing the entity from logging in or appearing in active queries.
+- **Accident Prevention**: A simple UI click can trigger a soft delete. Hard deletes require the actor to actively input their password, breaking muscle memory and preventing accidental data loss.
 
 ---
 
@@ -607,6 +637,7 @@ All endpoints are versioned under `/api/v1/`. Authentication is managed via sess
   - [5. Caché y Rendimiento — Redis Write-Through](#5-caché-y-rendimiento--redis-write-through)
   - [6. Blindaje de Seguridad — Mitigación Pickle RCE](#6-blindaje-de-seguridad--mitigación-pickle-rce)
   - [7. Motor de Cumplimiento — Middleware de Auditoría](#7-motor-de-cumplimiento--middleware-de-auditoría)
+  - [8. Salvaguardas de Acciones Destructivas](#8-salvaguardas-de-acciones-destructivas)
 - [Estándares de Seguridad y Cumplimiento](#estandares-de-seguridad-y-cumplimiento)
 - [Estructura del Proyecto](#estructura-del-proyecto)
 - [Prerrequisitos](#prerrequisitos)
@@ -884,7 +915,36 @@ class AuditMiddleware:
 
 **`on_delete=models.PROTECT`**: La clave foránea `actor` bloquea la eliminación de cualquier usuario que tenga registros de auditoría. Esta es una restricción deliberada y dura a nivel de base de datos — la cadena de custodia legal no puede romperse a través de una acción de interfaz de usuario.
 
-**Almacenamiento JSONB**: El campo `metadata_json` usa el tipo `jsonb` nativo de PostgreSQL, habilitando consultas indexadas sobre el payload de auditoría sin cambios de esquema a medida que los campos capturados evolucionen.
+**Almacenamiento JSONB**: El campo `metadata_json` usa el tipo nativo `jsonb` de PostgreSQL, permitiendo consultas indexadas sobre el payload de auditoría sin cambios de esquema a medida que evolucionan los campos capturados.
+
+---
+
+### 8. Salvaguardas de Acciones Destructivas
+
+> **Decisión**: Las operaciones estándar de `DELETE` actúan como "Soft Deletes" no destructivos. La destrucción permanente de datos requiere un endpoint separado y un paso de re-autenticación administrativa out-of-band.
+
+```python
+# Soft Delete no destructivo (Desactivar)
+def perform_destroy(self, instance):
+    instance.is_active = False
+    instance.save()
+
+# Hard Delete Destructivo (Requiere Re-Autenticación)
+@action(detail=True, methods=['post'], url_path='hard-delete')
+def hard_delete(self, request, pk=None):
+    instance = self.get_object()
+    password = request.data.get('password')
+    user = authenticate(username=request.user.username, password=password)
+    
+    if user is not None:
+        instance.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    return Response({"error": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+```
+
+**¿Por qué separar Soft y Hard Deletes?**
+- **Integridad de Datos**: Los soft deletes preservan la integridad relacional (ej. logs de auditoría históricos vinculados a un empleado) mientras evitan que la entidad inicie sesión o aparezca en consultas activas.
+- **Prevención de Accidentes**: Un simple clic en la UI puede desencadenar un soft delete. Los hard deletes requieren que el actor introduzca activamente su contraseña, rompiendo la memoria muscular y previniendo la pérdida accidental de datos.
 
 ---
 
