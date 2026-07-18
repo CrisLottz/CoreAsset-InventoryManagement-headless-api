@@ -34,6 +34,22 @@ class UserSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
+    def update(self, instance, validated_data):
+        """
+        Interceptamos la actualización para asegurar que si se provee
+        una nueva contraseña, esta sea hasheada antes de guardar.
+        """
+        password = validated_data.pop('password', None)
+        
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+            
+        if password:
+            instance.set_password(password)
+            
+        instance.save()
+        return instance
+
 class AssignRoleSerializer(serializers.Serializer):
     """
     Serializador RPC exclusivo para validar la inyección de roles.
