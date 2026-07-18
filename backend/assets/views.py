@@ -34,6 +34,7 @@ class CategoryStructureViewSet(viewsets.ModelViewSet): # <-- Habilitada la capa 
 )
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
+    permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
 
     def get_queryset(self):
         queryset = Asset.objects.all() 

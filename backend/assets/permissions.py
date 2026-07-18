@@ -15,4 +15,7 @@ class IsLocationManagerStrict(permissions.BasePermission):
 
 
         location = obj if hasattr(obj, 'name') else obj.location
+        if location is None:
+            return False
+            
         return request.user.assigned_locations.filter(id=location.id).exists()
