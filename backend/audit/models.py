@@ -14,7 +14,7 @@ class AuditLog(models.Model):
 
     action = models.CharField(max_length=50)
     entity_type = models.CharField(max_length=100)
-    entity_id = models.UUIDField()
+    entity_id = models.UUIDField(null=True, blank=True)
 
 
     metadata_json = models.JSONField(default=dict)
