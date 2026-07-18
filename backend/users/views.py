@@ -83,6 +83,27 @@ class LogoutView(APIView):
             status=status.HTTP_200_OK
         )
 
+class VerifyPasswordView(APIView):
+    """
+    Endpoint para que el frontend valide de forma segura la contraseña
+    actual del usuario antes de realizar operaciones destructivas
+    (ej: eliminar campos del sistema en Category Builder).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        password = request.data.get('password')
+        
+        if not password:
+            return Response({"detail": "La contraseña es obligatoria."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # check_password delega al hasher subyacente la comprobación segura
+        if request.user.check_password(password):
+            return Response({"detail": "Contraseña válida."}, status=status.HTTP_200_OK)
+        else:
+            return Response({"detail": "Contraseña incorrecta."}, status=status.HTTP_401_UNAUTHORIZED)
+
+
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-date_joined')
     serializer_class = UserSerializer
