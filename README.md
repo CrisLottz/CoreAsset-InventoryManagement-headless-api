@@ -44,6 +44,12 @@
 - [Installation & Local Deployment](#installation--local-deployment)
 - [API Documentation](#api-documentation)
 - [API Reference](#api-reference)
+  - [Authentication](#authentication)
+  - [User Management](#user-management)
+  - [Roles (RBAC)](#roles-rbac)
+  - [Employees](#employees)
+  - [Asset Inventory](#asset-inventory)
+  - [Locations](#locations)
 - [Production Checklist](#production-checklist)
 
 ---
@@ -62,6 +68,7 @@ The backend is completely decoupled from any frontend. It communicates exclusive
 |---|---|---|
 | **Authentication** | Session-based auth (Cookie + CSRF) | `SessionAuthentication` — no JWT |
 | **Identity (IAM)** | Custom User model with UUID v4 PK | `users.User` → `AbstractUser` |
+| **Employees** | Identity linking & metadata | `employees.Employee` |
 | **RBAC** | Role = Proxy over Django Group | `rbac.Role` → `auth_group` (zero DDL) |
 | **Permissions** | Geographic write-scoping per location | `IsLocationManagerStrict` object permission |
 | **Inventory** | Polymorphic assets via relational trunk + JSONB | `Asset.metadata_json` + GIN index |
@@ -366,6 +373,13 @@ CoreAsset-RBAC-Inventory-Engine/
 │   │   ├── urls.py                 # /locations/ /inventory/
 │   │   └── admin.py
 │   │
+│   ├── employees/                  # Employee Management
+│   │   ├── models.py               # Employee (is_active for soft delete)
+│   │   ├── serializers.py          # EmployeeSerializer
+│   │   ├── views.py                # EmployeeViewSet (reactivate, hard-delete, csv-import)
+│   │   ├── urls.py                 # /employees/
+│   │   └── admin.py
+│   │
 │   └── audit/                      # Compliance Engine
 │       ├── middleware.py            # AuditMiddleware (intercepts all mutations)
 │       ├── models.py               # AuditLog (JSONB, PROTECT FK, UUID PK)
@@ -498,6 +512,19 @@ All endpoints are versioned under `/api/v1/`. Authentication is managed via sess
 | `PUT/PATCH` | `/api/v1/rbac/roles/{id}/` | ✓ | Update a role |
 | `DELETE` | `/api/v1/rbac/roles/{id}/` | ✓ | Delete a role |
 
+### Employees
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/v1/employees/` | ✓ | List employees (filter by status) |
+| `POST` | `/api/v1/employees/` | ✓ | Create an employee |
+| `GET` | `/api/v1/employees/{uuid}/` | ✓ | Retrieve an employee |
+| `PUT/PATCH` | `/api/v1/employees/{uuid}/` | ✓ | Update an employee |
+| `DELETE` | `/api/v1/employees/{uuid}/` | ✓ | Soft-delete (deactivate) an employee |
+| `POST` | `/api/v1/employees/{uuid}/reactivate/` | ✓ | Reactivate a soft-deleted employee |
+| `POST` | `/api/v1/employees/{uuid}/hard-delete/` | ✓ | Permanently delete (requires admin password) |
+| `POST` | `/api/v1/employees/import-csv/` | ✓ | Bulk import via CSV mapping |
+
 ### Asset Inventory
 
 | Method | Endpoint | Auth | Description |
@@ -586,6 +613,12 @@ All endpoints are versioned under `/api/v1/`. Authentication is managed via sess
 - [Instalación y Despliegue Local](#instalación-y-despliegue-local)
 - [Documentación de la API](#documentación-de-la-api)
 - [Referencia de la API](#referencia-de-la-api)
+  - [Autenticación](#autenticación)
+  - [Gestión de Usuarios](#gestión-de-usuarios)
+  - [Roles (RBAC)](#roles-rbac)
+  - [Empleados](#empleados)
+  - [Inventario de Activos](#inventario-de-activos)
+  - [Ubicaciones](#ubicaciones)
 - [Lista de Verificación para Producción](#lista-de-verificación-para-producción)
 
 ---
@@ -604,6 +637,7 @@ El backend está completamente desacoplado de cualquier frontend. Se comunica ex
 |---|---|---|
 | **Autenticación** | Auth basada en sesión (Cookie + CSRF) | `SessionAuthentication` — sin JWT |
 | **Identidad (IAM)** | Modelo de Usuario con UUID v4 como PK | `users.User` → `AbstractUser` |
+| **Empleados** | Enlace de identidad y metadatos | `employees.Employee` |
 | **RBAC** | Rol = Proxy sobre Group de Django | `rbac.Role` → `auth_group` (cero DDL) |
 | **Permisos** | Escritura acotada geográficamente por sede | Permiso de objeto `IsLocationManagerStrict` |
 | **Inventario** | Activos polimórficos via tronco relacional + JSONB | `Asset.metadata_json` + índice GIN |
