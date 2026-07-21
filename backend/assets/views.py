@@ -1,8 +1,9 @@
 from rest_framework import viewsets, status, pagination
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import DjangoModelPermissions
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from django.db.models import Q, Value
+from django.db.models import Q, Value, Count, F
 from django.db.models.functions import Concat
 
 from .models import Location, AssetCategory, Asset, UserTablePreference
@@ -10,9 +11,27 @@ from .serializers import LocationSerializer, AssetCategorySerializer, AssetSeria
 from .permissions import IsLocationManagerStrict
 
 class LocationViewSet(viewsets.ModelViewSet):
-    queryset = Location.objects.all().order_by('name')
+    queryset = Location.objects.annotate(assets_count=Count('assets')).order_by('name')
     serializer_class = LocationSerializer
     permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
+
+    @action(detail=True, methods=['get'])
+    def category_breakdown(self, request, pk=None):
+        location = self.get_object()
+        breakdown = location.assets.values(
+            'category__id', 
+            'category__name'
+        ).annotate(count=Count('id')).order_by('-count')
+        
+        formatted_breakdown = [
+            {
+                "category_id": str(item['category__id']),
+                "category_name": item['category__name'],
+                "count": item['count']
+            }
+            for item in breakdown
+        ]
+        return Response(formatted_breakdown)
 
 class CategoryStructureViewSet(viewsets.ModelViewSet): # <-- Habilitada la capa de mutación
     queryset = AssetCategory.objects.prefetch_related('fields').filter(is_hidden=False).order_by('display_order')
