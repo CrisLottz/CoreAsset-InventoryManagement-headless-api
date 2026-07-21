@@ -7,8 +7,10 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'password', 'is_staff', 'is_active', 'is_mfa_enabled']
-
+        fields = [
+            'id', 'username', 'email', 'password', 'is_staff', 'is_active', 'is_mfa_enabled',
+            'employee', 'assigned_locations', 'groups', 'user_permissions'
+        ]
 
         extra_kwargs = {
             'password': {'write_only': True},
@@ -17,29 +19,35 @@ class UserSerializer(serializers.ModelSerializer):
 
 
     def create(self, validated_data):
-        """
-        Interceptamos la creación para asegurar que la contraseña pase por
-        el algoritmo de hashing (PBKDF2/Argon2) antes de tocar PostgreSQL.
-        """
-
         password = validated_data.pop('password', None)
-
+        assigned_locations = validated_data.pop('assigned_locations', [])
+        groups = validated_data.pop('groups', [])
+        user_permissions = validated_data.pop('user_permissions', [])
 
         user = User(**validated_data)
-
         if password:
-
             user.set_password(password)
-
         user.save()
+
+        if assigned_locations:
+            user.assigned_locations.set(assigned_locations)
+        if groups:
+            user.groups.set(groups)
+        if user_permissions:
+            user.user_permissions.set(user_permissions)
+
         return user
 
     def update(self, instance, validated_data):
-        """
-        Interceptamos la actualización para asegurar que si se provee
-        una nueva contraseña, esta sea hasheada antes de guardar.
-        """
         password = validated_data.pop('password', None)
+        
+        # M2M Fields handling
+        if 'assigned_locations' in validated_data:
+            instance.assigned_locations.set(validated_data.pop('assigned_locations'))
+        if 'groups' in validated_data:
+            instance.groups.set(validated_data.pop('groups'))
+        if 'user_permissions' in validated_data:
+            instance.user_permissions.set(validated_data.pop('user_permissions'))
         
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

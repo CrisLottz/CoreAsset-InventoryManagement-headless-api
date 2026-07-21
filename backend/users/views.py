@@ -42,7 +42,8 @@ class LoginView(APIView):
                     "id": user.id,
                     "username": user.username,
                     "email": user.email,
-                    "is_staff": user.is_staff
+                    "is_staff": user.is_staff,
+                    "permissions": list(user.get_all_permissions())
                 }
             }, status=status.HTTP_200_OK)
         else:
@@ -67,7 +68,8 @@ class UserMeView(APIView):
             "username": user.username,
             "email": user.email,
             "is_staff": user.is_staff,
-            "is_mfa_enabled": user.is_mfa_enabled
+            "is_mfa_enabled": user.is_mfa_enabled,
+            "permissions": list(user.get_all_permissions())
         }, status=status.HTTP_200_OK)
 
 class LogoutView(APIView):
