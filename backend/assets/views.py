@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, pagination
 from rest_framework.response import Response
 from rest_framework.permissions import DjangoModelPermissions
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
@@ -19,6 +19,11 @@ class CategoryStructureViewSet(viewsets.ModelViewSet): # <-- Habilitada la capa 
     serializer_class = AssetCategorySerializer
     permission_classes = [DjangoModelPermissions]
 
+class StandardResultsSetPagination(pagination.PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 @extend_schema_view(
     list=extend_schema(
         summary="Retrieve paginated assets with targeted server-side filtering and sorting",
@@ -35,6 +40,7 @@ class CategoryStructureViewSet(viewsets.ModelViewSet): # <-- Habilitada la capa 
 class AssetViewSet(viewsets.ModelViewSet):
     serializer_class = AssetSerializer
     permission_classes = [DjangoModelPermissions, IsLocationManagerStrict]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         queryset = Asset.objects.all() 
