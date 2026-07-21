@@ -78,18 +78,29 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         if not file.name.endswith('.csv'):
             return Response({"error": "Invalid file type. Only CSV is allowed."}, status=status.HTTP_400_BAD_REQUEST)
 
-        decoded_file = file.read().decode('utf-8')
+        try:
+            file_bytes = file.read()
+            try:
+                decoded_file = file_bytes.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                decoded_file = file_bytes.decode('iso-8859-1')
+        except Exception as e:
+            return Response({"error": f"Error decoding file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
         io_string = io.StringIO(decoded_file)
         reader = csv.DictReader(io_string)
         
         created_count = 0
         errors = []
 
-        for row_num, row in enumerate(reader, start=1):
+        for row_num, row in enumerate(reader, start=2): # Start at 2 since row 1 is headers
+            # Skip completely empty rows
+            if not any(val.strip() if val else False for val in row.values()):
+                continue
+
             employee_data = {}
             for csv_col, db_col in mapping.items():
                 if csv_col in row:
-                    employee_data[db_col] = row[csv_col].strip()
+                    employee_data[db_col] = row[csv_col].strip() if row[csv_col] else ""
             
             serializer = self.get_serializer(data=employee_data)
             if serializer.is_valid():
