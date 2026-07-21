@@ -6,6 +6,13 @@ import uuid
 class User(AbstractUser):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     is_mfa_enabled = models.BooleanField(default=False)
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    
+    VISIBILITY_CHOICES = [
+        ('public', 'Public'),
+        ('private', 'Private')
+    ]
+    avatar_visibility = models.CharField(max_length=10, choices=VISIBILITY_CHOICES, default='public')
     
     # IAM Link: Conecta la credencial de acceso con la persona física
     employee = models.OneToOneField(

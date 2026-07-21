@@ -2,6 +2,7 @@ from django.contrib.auth import authenticate, login
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+import rest_framework
 from rest_framework.permissions import AllowAny
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -57,6 +58,7 @@ class LoginView(APIView):
 class UserMeView(APIView):
 
     permission_classes = [IsAuthenticated]
+    parser_classes = [rest_framework.parsers.MultiPartParser, rest_framework.parsers.JSONParser]
 
     def get(self, request):
 
@@ -69,7 +71,26 @@ class UserMeView(APIView):
             "email": user.email,
             "is_staff": user.is_staff,
             "is_mfa_enabled": user.is_mfa_enabled,
+            "avatar": request.build_absolute_uri(user.avatar.url) if user.avatar else None,
+            "avatar_visibility": user.avatar_visibility,
             "permissions": list(user.get_all_permissions())
+        }, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+        user = request.user
+        
+        # Simple update logic for avatar and visibility
+        if 'avatar' in request.FILES:
+            user.avatar = request.FILES['avatar']
+        if 'avatar_visibility' in request.data:
+            user.avatar_visibility = request.data['avatar_visibility']
+            
+        user.save()
+        
+        return Response({
+            "detail": "Preferencias actualizadas con éxito.",
+            "avatar": request.build_absolute_uri(user.avatar.url) if user.avatar else None,
+            "avatar_visibility": user.avatar_visibility,
         }, status=status.HTTP_200_OK)
 
 class LogoutView(APIView):
@@ -140,6 +161,31 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='change-password')
+    def change_password(self, request):
+        """
+        Cambia la contraseña del usuario autenticado.
+        Valida la contraseña actual antes de aplicar la nueva.
+        """
+        user = request.user
+        current_password = request.data.get('current_password')
+        new_password = request.data.get('new_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not current_password or not new_password or not confirm_password:
+            return Response({"detail": "Todos los campos de contraseña son obligatorios."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_password != confirm_password:
+            return Response({"detail": "La nueva contraseña y la confirmación no coinciden."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.check_password(current_password):
+            return Response({"detail": "La contraseña actual es incorrecta."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response({"detail": "Contraseña actualizada exitosamente."}, status=status.HTTP_200_OK)
 
     def get_serializer_class(self):
         """

@@ -1,9 +1,15 @@
 from rest_framework import viewsets, permissions
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils.dateparse import parse_datetime
+from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 from .models import AuditLog
 from .serializers import AuditLogSerializer
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -16,6 +22,7 @@ class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ['action', 'entity_type', 'ip_address']
     ordering_fields = ['created_at', 'action']
     ordering = ['-created_at']
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """
