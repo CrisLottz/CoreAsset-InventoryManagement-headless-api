@@ -9,13 +9,27 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'password', 'is_staff', 'is_active', 'is_mfa_enabled',
-            'employee', 'assigned_locations', 'groups', 'user_permissions'
+            'employee', 'assigned_locations', 'groups', 'user_permissions',
+            'avatar', 'avatar_visibility'
         ]
 
         extra_kwargs = {
             'password': {'write_only': True},
             'id': {'read_only': True}
         }
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        
+        # Privacy Logic: If avatar is private, hide it from other regular users
+        if request and request.user:
+            is_self = request.user.id == instance.id
+            is_admin = request.user.is_superuser or request.user.is_staff
+            if instance.avatar_visibility == 'private' and not is_self and not is_admin:
+                ret['avatar'] = None
+                
+        return ret
 
 
     def create(self, validated_data):
