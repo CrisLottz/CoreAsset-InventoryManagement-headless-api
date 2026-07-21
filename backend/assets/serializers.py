@@ -4,9 +4,11 @@ from django.db import transaction
 from .models import Location, AssetCategory, CategoryField, Asset, UserTablePreference
 
 class LocationSerializer(serializers.ModelSerializer):
+    assets_count = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Location
-        fields = ['id', 'name', 'country', 'address', 'is_active', 'created_at']
+        fields = ['id', 'name', 'country', 'address', 'is_active', 'created_at', 'assets_count']
         read_only_fields = ['id', 'created_at']
 
 # ---------------------------------------------------------
