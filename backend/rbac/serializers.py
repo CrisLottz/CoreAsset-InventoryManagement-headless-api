@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.models import Permission
 from .models import Role
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -7,7 +8,7 @@ class RoleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Role
-        fields = ['id', 'name', 'user_count']
+        fields = ['id', 'name', 'user_count', 'permissions']
         read_only_fields = ['id', 'user_count']
 
     def get_user_count(self, obj):
@@ -17,3 +18,11 @@ class RoleSerializer(serializers.ModelSerializer):
         en despliegues masivos, después optimizaremos el ViewSet con prefetch_related.
         """
         return obj.user_set.count()
+
+class PermissionSerializer(serializers.ModelSerializer):
+    app_label = serializers.CharField(source='content_type.app_label', read_only=True)
+    model_name = serializers.CharField(source='content_type.model', read_only=True)
+
+    class Meta:
+        model = Permission
+        fields = ['id', 'name', 'codename', 'app_label', 'model_name']

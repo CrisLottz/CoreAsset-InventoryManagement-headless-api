@@ -4,7 +4,7 @@ from .views import LoginView, UserMeView, LogoutView, UserViewSet, VerifyPasswor
 
 router = DefaultRouter()
 
-router.register(r'inventory', UserViewSet, basename='user-inventory')
+router.register(r'', UserViewSet, basename='user')
 
 urlpatterns = [
     path('login/', LoginView.as_view(), name='api-login'),
