@@ -432,7 +432,9 @@ No local Python, PostgreSQL, or Redis installation is required. Everything runs 
 
 ---
 
-## Installation & Local Deployment
+## Docker Deployment (VPS / Production / Local)
+
+This project is fully containerized and designed to be deployed flawlessly on any VPS (e.g. A2 Hosting, DigitalOcean) using `docker-compose`.
 
 ### 1. Clone the repository
 
@@ -443,34 +445,36 @@ cd CoreAsset-RBAC-Inventory-Engine
 
 ### 2. Configure Environment Variables
 
-Create your local environment file from the provided template. This step is **strictly required** to authorize your custom frontend's domain via CORS.
+Create your environment file from the provided template. **This step is strictly required** for production to secure the application.
 
 ```bash
 cp .env.example .env
 ```
 
-*Open `.env` and edit `CORS_ALLOWED_ORIGINS` to match your frontend's port or domain (e.g., `http://localhost:4321`).*
+*Open `.env` and configure the following for production:*
+- `SECRET_KEY`: Set a secure, random string.
+- `DEBUG`: Must be `False` for production.
+- `CORS_ALLOWED_ORIGINS`: Match your frontend's domain (e.g., `https://dashboard.yourcompany.com`).
+- `ALLOWED_HOSTS`: Add your backend's domain/IP (e.g., `api.yourcompany.com`).
 
-### 3. Build and start all services
+### 3. Build and start all services in detached mode
 
 ```bash
-docker compose up --build
+docker-compose up -d --build
 ```
 
 > First build takes ~60–90s (Python image + Poetry dependency install). Subsequent starts are near-instant.
 
 ### 4. Apply database migrations
 
-Open a second terminal:
-
 ```bash
-docker compose exec backend python manage.py migrate
+docker-compose exec backend python manage.py migrate
 ```
 
-### 5. Create a superuser
+### 5. Create an Administrator account
 
 ```bash
-docker compose exec backend python manage.py createsuperuser
+docker-compose exec backend python manage.py createsuperuser
 ```
 
 ### 6. Verify the stack
@@ -482,11 +486,11 @@ docker compose exec backend python manage.py createsuperuser
 | Django Admin | [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/) |
 | Frontend (dev) | [http://127.0.0.1:5173/](http://127.0.0.1:5173/) |
 
-### Shutdown
+### Shutdown or Reset
 
 ```bash
-docker compose down       # Stop services, preserve data
-docker compose down -v    # Stop services + destroy database volume (full reset)
+docker-compose down       # Stop services, preserve data
+docker-compose down -v    # Stop services + destroy database volume (full reset)
 ```
 
 ---

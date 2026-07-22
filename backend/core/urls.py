@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/v1/assets/', include('assets.urls')),
     path('api/v1/employees/', include('employees.urls')), # <-- REGISTERED UNDER DOMAIN ROOT
     path('api/v1/audit/', include('audit.urls')),
+    path('api/v1/analytics/', include('analytics.urls')),
 
     # API Documentation (drf-spectacular)
     path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),

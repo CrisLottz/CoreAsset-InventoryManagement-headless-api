@@ -37,7 +37,8 @@ INSTALLED_APPS = [
     'rbac',
     'audit',
     'assets',
-    'employees'
+    'employees',
+    'analytics'
 ]
 
 AUTH_USER_MODEL = 'users.User'
