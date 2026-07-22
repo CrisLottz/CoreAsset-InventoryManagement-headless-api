@@ -116,6 +116,111 @@ class AssetViewSet(viewsets.ModelViewSet):
 
         return queryset
 
+    @action(detail=False, methods=['post'], url_path='import-csv')
+    def import_csv(self, request):
+        if 'file' not in request.FILES:
+            return Response({"error": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        category_id = request.data.get('category_id')
+        if not category_id:
+            return Response({"error": "Category ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        import json
+        mapping_str = request.data.get('mapping')
+        if not mapping_str:
+            return Response({"error": "No column mapping provided."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            mapping = json.loads(mapping_str)
+        except json.JSONDecodeError:
+            return Response({"error": "Invalid mapping format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        if not file.name.endswith('.csv'):
+            return Response({"error": "Invalid file type. Only CSV is allowed."}, status=status.HTTP_400_BAD_REQUEST)
+
+        delimiter = request.data.get('delimiter', ',')
+
+        import csv
+        import io
+        try:
+            file_bytes = file.read()
+            try:
+                decoded_file = file_bytes.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                decoded_file = file_bytes.decode('iso-8859-1')
+        except Exception as e:
+            return Response({"error": f"Error decoding file: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        io_string = io.StringIO(decoded_file)
+        reader = csv.DictReader(io_string, delimiter=delimiter)
+        
+        created_count = 0
+        errors = []
+
+        from employees.models import Employee
+        import uuid
+        
+        def is_valid_uuid(val):
+            try:
+                uuid.UUID(str(val))
+                return True
+            except ValueError:
+                return False
+
+        for row_num, row in enumerate(reader, start=2):
+            if not any(val.strip() if val else False for val in row.values()):
+                continue
+
+            asset_data = {
+                "category": category_id,
+                "dynamic_data": {}
+            }
+            
+            for csv_col, db_col in mapping.items():
+                if csv_col in row:
+                    val = row[csv_col].strip() if row[csv_col] else ""
+                    if not val:
+                        continue
+                        
+                    if db_col == 'internal_tag':
+                        asset_data['internal_tag'] = val
+                    elif db_col == 'location':
+                        if is_valid_uuid(val):
+                            asset_data['location'] = val
+                        else:
+                            loc = Location.objects.filter(name__iexact=val).first()
+                            if loc:
+                                asset_data['location'] = str(loc.id)
+                    elif db_col == 'assigned_to':
+                        if is_valid_uuid(val):
+                            asset_data['assigned_to'] = val
+                        else:
+                            emp = Employee.objects.filter(email__iexact=val).first()
+                            if not emp:
+                                emp = Employee.objects.filter(Q(first_name__icontains=val) | Q(last_name__icontains=val)).first()
+                            if emp:
+                                asset_data['assigned_to'] = str(emp.id)
+                    else:
+                        asset_data['dynamic_data'][db_col] = val
+            
+            serializer = self.get_serializer(data=asset_data)
+            if serializer.is_valid():
+                serializer.save()
+                created_count += 1
+            else:
+                errors.append({"row": row_num, "errors": serializer.errors})
+
+        if errors:
+            return Response({
+                "message": f"Created {created_count} assets with some errors.",
+                "created": created_count,
+                "errors": errors
+            }, status=status.HTTP_207_MULTI_STATUS)
+
+        return Response({"message": f"Successfully imported {created_count} assets.", "created": created_count}, status=status.HTTP_201_CREATED)
+
+
 class UserTablePreferenceViewSet(viewsets.ModelViewSet):
     serializer_class = UserTablePreferenceSerializer
     
